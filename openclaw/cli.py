@@ -1,4 +1,4 @@
-﻿"""Command line interface for the Python OpenClaw runtime."""
+"""Command line interface for the Python OpenClaw runtime."""
 
 from __future__ import annotations
 
@@ -16,15 +16,22 @@ from openclaw.agent.agent import Agent
 from openclaw.config import load_env_file
 from openclaw.llm.openai_provider import OpenAIProvider
 from openclaw.llm.provider import MockProvider
-from openclaw.llm.types import AssistantMessage, message_to_dict
-from openclaw.session.agent_session import AgentSession
+from openclaw.llm.types import AssistantMessage, ToolCallBlock, message_to_dict
+from openclaw.session.agent_session import AgentSession, SessionContextPolicy
 from openclaw.session.paths import (
     resolve_chatdata_dir,
     resolve_session_store_path,
     resolve_session_transcript_path,
 )
+from openclaw.session.context import CompactionSettings
 from openclaw.session.store import SessionStore
 from openclaw.session.transcript import Transcript
+from openclaw.tools.builder import build_tool_registry
+from openclaw.tools.catalog import list_catalog_entries
+from openclaw.tools.executor import execute_tool_call, make_base_context
+from openclaw.tools.policy import ToolPolicy
+from openclaw.tools.registry import normalize_tool
+from openclaw.tools.shell.approval import ShellApprovalRequest
 
 DEFAULT_SYSTEM_PROMPT = "You are a helpful assistant."
 DEFAULT_MODEL = "gpt-4.1-mini"
@@ -61,32 +68,11 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="*",
         help='Prompt text, or command path such as "transcripts show <session-id>".',
     )
-    parser.add_argument(
-        "--provider",
-        choices=["openai", "mock"],
-        default="openai",
-        help="LLM provider to use.",
-    )
-    parser.add_argument(
-        "--model",
-        default=None,
-        help="Model name. Defaults to OPENAI_MODEL or gpt-4.1-mini.",
-    )
-    parser.add_argument(
-        "--system",
-        default=DEFAULT_SYSTEM_PROMPT,
-        help="System prompt for the agent.",
-    )
-    parser.add_argument(
-        "--env-file",
-        default=".env",
-        help="Path to a .env file to load before provider creation.",
-    )
-    parser.add_argument(
-        "--no-env-file",
-        action="store_true",
-        help="Do not load a .env file.",
-    )
+    parser.add_argument("--provider", choices=["openai", "mock"], default="openai", help="LLM provider to use.")
+    parser.add_argument("--model", default=None, help="Model name. Defaults to OPENAI_MODEL or gpt-4.1-mini.")
+    parser.add_argument("--system", default=DEFAULT_SYSTEM_PROMPT, help="System prompt for the agent.")
+    parser.add_argument("--env-file", default=".env", help="Path to a .env file to load before provider creation.")
+    parser.add_argument("--no-env-file", action="store_true", help="Do not load a .env file.")
     parser.add_argument(
         "--chatdata-dir",
         default=None,
@@ -123,9 +109,70 @@ def build_parser() -> argparse.ArgumentParser:
         help="Pass max_output_tokens through to providers that support it.",
     )
     parser.add_argument(
+        "--tool-profile",
+        choices=["minimal", "readonly", "coding", "messaging", "full"],
+        default="coding",
+        help="Default tool profile for agent prompts. Use full to expose runtime and web tools.",
+    )
+    parser.add_argument(
+        "--tools-allow",
+        default=None,
+        help="Comma-separated tool allowlist. Supports groups such as group:fs, group:web, group:runtime.",
+    )
+    parser.add_argument(
+        "--tools-deny",
+        default=None,
+        help="Comma-separated tool denylist. Supports groups such as group:runtime.",
+    )
+    parser.add_argument(
+        "--tools-also-allow",
+        default=None,
+        help="Comma-separated tools to add on top of the selected profile.",
+    )
+    parser.add_argument(
+        "--context-window-tokens",
+        type=int,
+        default=120_000,
+        help="Estimated model context window used by pre-prompt compaction.",
+    )
+    parser.add_argument(
+        "--reserve-tokens",
+        type=int,
+        default=16_384,
+        help="Tokens reserved for model output and safety margin during context precheck.",
+    )
+    parser.add_argument(
+        "--keep-recent-tokens",
+        type=int,
+        default=20_000,
+        help="Approximate recent tail tokens retained after automatic compaction.",
+    )
+    parser.add_argument(
+        "--tool-result-max-chars",
+        type=int,
+        default=20_000,
+        help="Maximum characters retained per tool result before provider calls.",
+    )
+    parser.add_argument(
+        "--disable-compaction",
+        action="store_true",
+        help="Disable automatic session compaction; oversized tool results may still be truncated.",
+    )
+    parser.add_argument(
+        "--shell-approval",
+        choices=["auto", "require", "deny"],
+        default="auto",
+        help="Shell approval mode: auto allows known mutation commands, require prompts before non-readonly commands, deny blocks them.",
+    )
+    parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Approve shell commands that require confirmation without prompting. Use with care.",
+    )
+    parser.add_argument(
         "--json",
         action="store_true",
-        help="Print the assistant message as JSON instead of plain text.",
+        help="Print JSON output, or pass JSON input for tools run.",
     )
     return parser
 
@@ -142,6 +189,8 @@ async def run(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
         return show_transcript_command(args)
     if args.arguments[:1] == ["transcripts"]:
         raise CliError('unknown transcripts command. Did you mean "transcripts show <session-id>"?')
+    if args.arguments[:1] == ["tools"]:
+        return await tools_command(args)
 
     prompt = " ".join(args.arguments).strip()
     if not prompt:
@@ -154,6 +203,102 @@ async def run(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     else:
         print(assistant_text(message))
     return 0
+
+
+async def tools_command(args: argparse.Namespace) -> int:
+    if len(args.arguments) < 2:
+        raise CliError("missing tools command. Usage: pyclaw tools list|describe|run")
+    command = args.arguments[1]
+    if command == "list":
+        return tools_list_command(args)
+    if command == "describe":
+        return tools_describe_command(args)
+    if command == "run":
+        return await tools_run_command(args)
+    raise CliError('unknown tools command. Did you mean "tools list", "tools describe", or "tools run"?')
+
+
+def tools_list_command(args: argparse.Namespace) -> int:
+    entries = list_catalog_entries()
+    if args.json:
+        print(json.dumps([entry.__dict__ for entry in entries], ensure_ascii=False, indent=2))
+        return 0
+    for entry in entries:
+        profiles = ",".join(entry.profiles) or "-"
+        tags = ",".join(entry.tags) or "-"
+        print(f"{entry.name:14} {entry.section_id:10} profiles={profiles:20} tags={tags}")
+    return 0
+
+
+def tools_describe_command(args: argparse.Namespace) -> int:
+    if len(args.arguments) < 3:
+        raise CliError("missing tool name. Usage: pyclaw tools describe <tool-name>")
+    name = args.arguments[2]
+    registry = build_tool_registry(build_tool_policy(args, default_profile="full"))
+    tool_like = registry.resolve(name)
+    if tool_like is None:
+        raise CliError(f"tool not found: {name}")
+    tool = normalize_tool(tool_like)
+    data = {
+        "name": tool.name,
+        "label": tool.label,
+        "description": tool.description,
+        "execution_mode": tool.execution_mode,
+        "metadata": tool.metadata.__dict__,
+        "input_schema": tool.input_schema,
+    }
+    if args.json:
+        print(json.dumps(data, ensure_ascii=False, indent=2))
+    else:
+        print(f"name: {data['name']}")
+        print(f"label: {data['label']}")
+        print(f"description: {data['description']}")
+        print(f"execution_mode: {data['execution_mode']}")
+        print("metadata: " + json.dumps(data["metadata"], ensure_ascii=False, separators=(",", ":")))
+        print("input_schema: " + json.dumps(data["input_schema"], ensure_ascii=False, indent=2))
+    return 0
+
+
+async def tools_run_command(args: argparse.Namespace) -> int:
+    if len(args.arguments) < 3:
+        raise CliError("missing tool name. Usage: pyclaw tools run <tool-name> --json '{...}'")
+    name = args.arguments[2]
+    raw_arguments = args.arguments[3:]
+    tool_input = parse_tool_run_arguments(raw_arguments)
+    registry = build_tool_registry(build_tool_policy(args, default_profile="full"))
+    context = make_base_context(
+        cwd=os.getcwd(),
+        workspace_dir=os.getcwd(),
+        metadata=build_tool_context_metadata(args),
+    )
+    outcome = await execute_tool_call(ToolCallBlock(id="manual_1", name=name, input=tool_input), registry, context)
+    block = outcome.message.content[0]
+    if args.json:
+        print(json.dumps(block, ensure_ascii=False, indent=2))
+    else:
+        print(str(block.get("output", "")))
+    return 1 if block.get("is_error") else 0
+
+
+def parse_tool_run_arguments(values: list[str]) -> dict[str, Any]:
+    if not values:
+        return {}
+    raw = " ".join(values).strip()
+    if raw.startswith("{"):
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise CliError(f"invalid tool JSON input: {exc.msg}") from exc
+        if not isinstance(data, dict):
+            raise CliError("tool JSON input must be an object")
+        return data
+    parsed: dict[str, Any] = {}
+    for item in values:
+        if "=" not in item:
+            raise CliError("tool arguments must be JSON or key=value pairs")
+        key, value = item.split("=", 1)
+        parsed[key] = value
+    return parsed
 
 
 def show_transcript_command(args: argparse.Namespace) -> int:
@@ -195,6 +340,8 @@ def read_transcript_entries(path: Path) -> list[dict[str, Any]]:
 def format_transcript_text(entries: list[dict[str, Any]]) -> str:
     lines: list[str] = []
     for entry in entries:
+        if entry.get("type") != "message":
+            continue
         message = dict(entry.get("message") or {})
         role = str(message.get("role") or "unknown")
         text = message_text(message)
@@ -205,6 +352,26 @@ def format_transcript_text(entries: list[dict[str, Any]]) -> str:
 def format_transcript_detail(entries: list[dict[str, Any]]) -> str:
     sections: list[str] = []
     for entry in entries:
+        entry_type = entry.get("type")
+        if entry_type == "session":
+            sections.append(
+                f"[{entry.get('timestamp', '')}] session id={entry.get('id', '')} cwd={entry.get('cwd', '')}".strip()
+            )
+            continue
+        if entry_type == "compaction":
+            details = entry.get("details")
+            header = (
+                f"[{entry.get('timestamp', '')}] compaction "
+                f"firstKeptEntryId={entry.get('firstKeptEntryId', '')} "
+                f"tokensBefore={entry.get('tokensBefore', '')}"
+            )
+            if isinstance(details, dict) and details:
+                header += " details=" + json.dumps(details, ensure_ascii=False, separators=(",", ":"))
+            sections.append(header + "\n" + str(entry.get("summary", "")))
+            continue
+        if entry_type != "message":
+            continue
+
         message = dict(entry.get("message") or {})
         role = str(message.get("role") or "unknown")
         timestamp = str(entry.get("timestamp") or message.get("timestamp") or "")
@@ -249,7 +416,16 @@ def format_non_text_blocks(message: dict[str, Any]) -> str:
             )
         elif block_type == "toolResult":
             prefix = "toolResult error" if block.get("is_error") else "toolResult"
-            lines.append(prefix + " " + str(block.get("name", "")) + " " + str(block.get("output", "")))
+            parts = [prefix, str(block.get("name", "")), str(block.get("output", ""))]
+            details = block.get("details")
+            if isinstance(details, dict) and details:
+                parts.append("details=" + json.dumps(details, ensure_ascii=False, separators=(",", ":")))
+            progress = block.get("progress")
+            if isinstance(progress, dict) and progress:
+                parts.append("progress=" + json.dumps(progress, ensure_ascii=False, separators=(",", ":")))
+            if block.get("terminate"):
+                parts.append("terminate=true")
+            lines.append(" ".join(parts))
         elif block_type != "text":
             lines.append(json.dumps(block, ensure_ascii=False, separators=(",", ":")))
     return "\n".join(lines) if lines else "[empty message]"
@@ -258,14 +434,90 @@ def format_non_text_blocks(message: dict[str, Any]) -> str:
 async def run_prompt(args: argparse.Namespace, prompt: str) -> AssistantMessage:
     model = args.model or os.environ.get("OPENAI_MODEL") or DEFAULT_MODEL
     provider = build_provider(args.provider, prompt, api_mode=args.api_mode)
+    cwd = os.getcwd()
+    policy = build_tool_policy(args)
     agent = Agent(
         model=model,
         provider=provider,
         system_prompt=args.system,
+        tools=build_tool_registry(policy),
         model_options=build_model_options(args),
+        cwd=cwd,
+        workspace_dir=cwd,
+        readonly=policy.readonly,
+        tool_metadata=build_tool_context_metadata(args),
     )
     session = build_agent_session(args, agent)
+    agent.session_id = session.session_id
+    agent.chatdata_dir = resolve_chatdata_dir(args.chatdata_dir)
     return await session.run_prompt(prompt)
+
+
+
+
+def build_tool_context_metadata(args: argparse.Namespace) -> dict[str, Any]:
+    metadata: dict[str, Any] = {
+        "shell_approval_mode": args.shell_approval,
+    }
+    if args.yes:
+        metadata["shell_approval_callback"] = approve_shell_without_prompt
+    elif args.shell_approval == "require":
+        metadata["shell_approval_callback"] = prompt_shell_approval
+    return metadata
+
+
+def approve_shell_without_prompt(request: ShellApprovalRequest) -> bool:
+    print_shell_approval_summary(request, approved_by="--yes")
+    return True
+
+
+def prompt_shell_approval(request: ShellApprovalRequest) -> bool:
+    print_shell_approval_summary(request)
+    if not sys.stdin.isatty():
+        print("pyclaw: shell command rejected because stdin is not interactive.", file=sys.stderr)
+        return False
+    try:
+        print("Approve shell command? [y/N] ", end="", file=sys.stderr, flush=True)
+        answer = input().strip().lower()
+    except EOFError:
+        print("pyclaw: shell command rejected because approval input ended.", file=sys.stderr)
+        return False
+    return answer in {"y", "yes"}
+
+
+def print_shell_approval_summary(request: ShellApprovalRequest, *, approved_by: str | None = None) -> None:
+    print("", file=sys.stderr)
+    print("pyclaw shell approval required", file=sys.stderr)
+    print(f"tool: {request.tool_name or 'shell'}", file=sys.stderr)
+    if request.session_id:
+        print(f"session: {request.session_id}", file=sys.stderr)
+    print(f"safety: {request.safety}", file=sys.stderr)
+    print("command:", file=sys.stderr)
+    print(request.command, file=sys.stderr)
+    if request.reasons:
+        print("reasons:", file=sys.stderr)
+        for reason in request.reasons:
+            print(f"- {reason}", file=sys.stderr)
+    if approved_by:
+        print(f"approved by {approved_by}", file=sys.stderr)
+
+
+def build_tool_policy(args: argparse.Namespace, *, default_profile: str | None = None) -> ToolPolicy:
+    profile = default_profile or args.tool_profile
+    return ToolPolicy(
+        profile=profile,
+        allow=parse_tool_name_set(args.tools_allow),
+        deny=parse_tool_name_set(args.tools_deny) or set(),
+        also_allow=parse_tool_name_set(args.tools_also_allow) or set(),
+        readonly=profile == "readonly",
+    )
+
+
+def parse_tool_name_set(value: str | None) -> set[str] | None:
+    if value is None:
+        return None
+    names = {item.strip() for item in value.split(",") if item.strip()}
+    return names
 
 
 def build_agent_session(args: argparse.Namespace, agent: Agent) -> AgentSession:
@@ -275,11 +527,22 @@ def build_agent_session(args: argparse.Namespace, agent: Agent) -> AgentSession:
         session_id=session_id,
         agent=agent,
         store=SessionStore(resolve_session_store_path(chatdata_dir)),
-        transcript=Transcript(resolve_session_transcript_path(chatdata_dir, session_id)),
+        transcript=Transcript(resolve_session_transcript_path(chatdata_dir, session_id), session_id=session_id, cwd=os.getcwd()),
         cwd=os.getcwd(),
         workspace_dir=os.getcwd(),
+        context_policy=build_session_context_policy(args),
     )
 
+def build_session_context_policy(args: argparse.Namespace) -> SessionContextPolicy:
+    return SessionContextPolicy(
+        compaction=CompactionSettings(
+            enabled=not args.disable_compaction,
+            context_window_tokens=args.context_window_tokens,
+            reserve_tokens=args.reserve_tokens,
+            keep_recent_tokens=args.keep_recent_tokens,
+            tool_result_max_chars=args.tool_result_max_chars,
+        )
+    )
 
 def sanitize_session_id(value: str) -> str:
     sanitized = re.sub(r"[^A-Za-z0-9._-]+", "-", value.strip())

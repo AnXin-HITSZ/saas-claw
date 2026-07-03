@@ -31,6 +31,9 @@ class ToolResultBlock:
     name: str
     output: Any
     is_error: bool = False
+    details: dict[str, Any] = field(default_factory=dict)
+    progress: dict[str, Any] | None = None
+    terminate: bool = False
     type: Literal["toolResult"] = field(default="toolResult", init=False)
 
 
@@ -89,6 +92,9 @@ def tool_result_content(
     output: Any,
     *,
     is_error: bool = False,
+    details: dict[str, Any] | None = None,
+    progress: dict[str, Any] | None = None,
+    terminate: bool = False,
 ) -> list[ContentBlock]:
     return [
         block_to_dict(
@@ -97,6 +103,9 @@ def tool_result_content(
                 name=name,
                 output=output,
                 is_error=is_error,
+                details=dict(details or {}),
+                progress=progress,
+                terminate=terminate,
             )
         )
     ]
@@ -161,3 +170,5 @@ def message_from_dict(data: dict[str, Any]) -> AgentMessage:
     if role == "tool":
         return ToolResultMessage(content=content, timestamp=timestamp)
     return BaseMessage(role=str(role), content=content, timestamp=timestamp)
+
+

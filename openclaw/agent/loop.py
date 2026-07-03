@@ -18,12 +18,12 @@ from openclaw.llm.provider import LlmProvider, ProviderEvent
 from openclaw.llm.types import (
     AgentMessage,
     AssistantMessage,
-    ToolCallBlock,
     ToolResultMessage,
     extract_tool_calls,
     message_to_dict,
-    tool_result_content,
 )
+from openclaw.tools.executor import execute_tool_call_batch, make_base_context
+from openclaw.tools.hooks import ToolHooks
 from openclaw.tools.registry import ToolRegistry
 
 ContextTransform = Callable[[list[AgentMessage]], list[AgentMessage]]
@@ -40,6 +40,14 @@ class LoopConfig:
     emit: EventEmitter
     transform_context: ContextTransform | None = None
     options: dict[str, Any] | None = None
+    session_id: str | None = None
+    cwd: Any | None = None
+    workspace_dir: Any | None = None
+    chatdata_dir: Any | None = None
+    tool_hooks: ToolHooks | None = None
+    workspace_only: bool = True
+    readonly: bool = False
+    tool_metadata: dict[str, Any] | None = None
 
 
 async def run_agent_loop(config: LoopConfig) -> AssistantMessage:
@@ -135,40 +143,26 @@ async def execute_tool_calls(config: LoopConfig, assistant: AssistantMessage) ->
     if not calls:
         return []
 
-    if all((tool := config.tools.resolve(call.name)) and tool.parallel for call in calls):
-        return await asyncio.gather(*[_execute_one_tool_call(config, call) for call in calls])
 
-    results: list[ToolResultMessage] = []
-    for call in calls:
-        results.append(await _execute_one_tool_call(config, call))
-    return results
-
-
-async def _execute_one_tool_call(config: LoopConfig, call: ToolCallBlock) -> ToolResultMessage:
-    config.emit(AgentEvent("tool_execution_start", {"call": call}))
-    tool = config.tools.resolve(call.name)
-    is_error = False
-    if tool is None:
-        output: Any = f"tool not found: {call.name}"
-        is_error = True
-    else:
-        try:
-            config.tools.validate_input(tool, call.input)
-            output = await tool(**call.input)
-        except Exception as exc:
-            output = str(exc)
-            is_error = True
-
-    message = ToolResultMessage(
-        content=tool_result_content(
-            tool_call_id=call.id,
-            name=call.name,
-            output=output,
-            is_error=is_error,
-        )
+    context = make_base_context(
+        cwd=config.cwd,
+        workspace_dir=config.workspace_dir,
+        session_id=config.session_id,
+        chatdata_dir=config.chatdata_dir,
+        model=config.model,
+        provider=getattr(config.provider, "provider_name", None),
+        emit=config.emit,
+        readonly=config.readonly,
+        workspace_only=config.workspace_only,
+        metadata=config.tool_metadata,
     )
-    config.emit(AgentEvent("tool_execution_end", {"call": call, "message": message, "is_error": is_error}))
-    return message
+    outcomes = await execute_tool_call_batch(calls, config.tools, context, config.tool_hooks)
+
+    messages: list[ToolResultMessage] = []
+    for outcome in outcomes:
+        messages.append(outcome.message)
+
+    return messages
 
 
 def _apply_delta(partial: AssistantMessage, event: ProviderEvent) -> None:

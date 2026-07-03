@@ -3,15 +3,23 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from openclaw.agent.agent import Agent
 from openclaw.agent.events import AgentEvent
+from openclaw.agent.loop import ContextTransform
 from openclaw.custom.hooks import NoopSessionHooks, SessionHooks
 from openclaw.guards.context_guard import ContextOverflowError
 from openclaw.guards.transcript_tool_result_guard import TranscriptToolResultGuard
-from openclaw.llm.types import AgentMessage, AssistantMessage, UserMessage, text_content
+from openclaw.llm.types import AgentMessage, AssistantMessage
+from openclaw.session.context import (
+    CompactionPreparation,
+    CompactionSettings,
+    estimate_context_tokens,
+    should_preemptively_compact_before_prompt,
+    truncate_oversized_tool_results,
+)
 from openclaw.session.store import SessionStore
 from openclaw.session.transcript import Transcript
 
@@ -22,6 +30,14 @@ class RetryPolicy:
     max_attempts: int = 3
     base_delay_seconds: float = 1.0
     max_delay_seconds: float = 30.0
+
+
+@dataclass
+class SessionContextPolicy:
+    compaction: CompactionSettings = field(default_factory=CompactionSettings)
+    terminal_overflow_message: str = (
+        "Context overflow: prompt too large for the model. Try a new session or use a larger-context model."
+    )
 
 
 class AgentSession:
@@ -37,6 +53,7 @@ class AgentSession:
         transcript_guard: TranscriptToolResultGuard | None = None,
         cwd: str | None = None,
         workspace_dir: str | None = None,
+        context_policy: SessionContextPolicy | None = None,
     ) -> None:
         self.session_id = session_id
         self.agent = agent
@@ -47,14 +64,27 @@ class AgentSession:
         self.transcript_guard = transcript_guard or TranscriptToolResultGuard()
         self.cwd = cwd
         self.workspace_dir = workspace_dir
+        self.context_policy = context_policy or SessionContextPolicy()
         self.retry_count = 0
         self.overflow_recovery_attempted = False
         self._hook_tasks: list[asyncio.Task[None]] = []
+        self._history_loaded = False
+        self._user_transform_context: ContextTransform | None = self.agent.transform_context
+        self.agent.transform_context = self._transform_context_before_prompt
         self.agent.subscribe(self._on_event)
 
     async def run_prompt(self, text: str) -> AssistantMessage:
+        self.load_history_once()
         message = await self.agent.prompt(text)
         return await self.handle_post_agent_run(message)
+
+    def load_history_once(self) -> None:
+        if self._history_loaded:
+            return
+        self._history_loaded = True
+        if self.agent.state.messages:
+            return
+        self.agent.state.messages.extend(self.transcript.read_context_messages())
 
     async def handle_post_agent_run(self, message: AssistantMessage) -> AssistantMessage:
         current = message
@@ -62,7 +92,7 @@ class AgentSession:
             if self.is_context_overflow(current) and not self.overflow_recovery_attempted:
                 self.overflow_recovery_attempted = True
                 self.agent.remove_last_assistant_error()
-                self.run_auto_compaction()
+                self.run_auto_compaction(reason="provider_overflow")
                 current = await self.agent.continue_()
                 continue
 
@@ -124,14 +154,57 @@ class AgentSession:
             await asyncio.sleep(delay)
         return True
 
-    def run_auto_compaction(self, *, keep_last: int = 8) -> None:
-        messages = self.agent.state.messages
-        if len(messages) <= keep_last:
-            return
-        older = messages[:-keep_last]
-        recent = messages[-keep_last:]
-        summary = self._summarize_messages(older)
-        self.agent.state.messages = [UserMessage(content=text_content(summary)), *recent]
+    def run_auto_compaction(self, *, reason: str = "context_budget") -> CompactionPreparation | None:
+        settings = self.context_policy.compaction
+        if not settings.enabled:
+            return None
+        preparation = self.transcript.compact(settings=settings, reason=reason)
+        if not preparation.should_compact:
+            return preparation
+        compacted_messages = self.transcript.read_context_messages()
+        self.agent.state.messages[:] = compacted_messages
+        self.agent.emit(
+            AgentEvent(
+                "session_compaction",
+                {
+                    "reason": reason,
+                    "tokens_before": preparation.tokens_before,
+                    "first_kept_entry_id": preparation.first_kept_entry_id,
+                },
+            )
+        )
+        return preparation
+
+    def _transform_context_before_prompt(self, messages: list[AgentMessage]) -> list[AgentMessage]:
+        transformed = self._apply_user_transform(messages)
+        settings = self.context_policy.compaction
+        route = should_preemptively_compact_before_prompt(transformed, settings=settings)
+
+        if route in {"compact_only", "compact_then_truncate"}:
+            preparation = self.run_auto_compaction(reason=f"pre_prompt:{route}")
+            if preparation is not None and preparation.should_compact:
+                transformed = self._apply_user_transform(self.agent.state.messages)
+                route = should_preemptively_compact_before_prompt(transformed, settings=settings)
+
+        if route in {"truncate_tool_results_only", "compact_then_truncate"}:
+            transformed, truncated = truncate_oversized_tool_results(
+                transformed,
+                max_chars=settings.tool_result_max_chars,
+            )
+            if truncated:
+                self.agent.emit(AgentEvent("tool_results_truncated", {"count": truncated, "route": route}))
+
+        tokens = estimate_context_tokens(transformed)
+        if tokens > settings.prompt_budget_tokens:
+            raise ContextOverflowError(
+                f"context length exceeded: {tokens} > {settings.prompt_budget_tokens}"
+            )
+        return transformed
+
+    def _apply_user_transform(self, messages: list[AgentMessage]) -> list[AgentMessage]:
+        if self._user_transform_context is None:
+            return list(messages)
+        return self._user_transform_context(messages)
 
     def _on_event(self, event: AgentEvent) -> None:
         if event.type != "message_end":
@@ -166,9 +239,3 @@ class AgentSession:
         tasks = self._hook_tasks
         self._hook_tasks = []
         await asyncio.gather(*tasks)
-
-    def _summarize_messages(self, messages: list[AgentMessage]) -> str:
-        return (
-            "Earlier conversation was compacted. "
-            f"{len(messages)} messages were summarized to recover context budget."
-        )

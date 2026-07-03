@@ -1,4 +1,4 @@
-﻿"""OpenAI-compatible provider adapter.
+"""OpenAI-compatible provider adapter.
 
 The OpenAI SDK is an optional dependency. Install with:
 
@@ -19,6 +19,7 @@ from typing import Any
 
 from openclaw.llm.provider import ProviderEvent
 from openclaw.llm.types import AssistantMessage, tool_call_content
+from openclaw.tools.schema import tool_to_chat_completions_schema, tool_to_responses_schema
 
 
 class OpenAIProvider:
@@ -256,18 +257,7 @@ def normalize_chat_completion_options(options: dict[str, Any]) -> dict[str, Any]
 
 
 def convert_tools_to_openai_responses(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    converted = []
-    for tool in tools:
-        converted.append(
-            {
-                "type": "function",
-                "name": tool["name"],
-                "description": tool.get("description", ""),
-                "parameters": tool.get("input_schema") or tool.get("parameters") or {"type": "object"},
-                "strict": bool(tool.get("strict", False)),
-            }
-        )
-    return converted
+    return [tool_to_responses_schema(tool, provider="openai", api_mode="responses") for tool in tools]
 
 
 def convert_tools_to_openai(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -277,19 +267,7 @@ def convert_tools_to_openai(tools: list[dict[str, Any]]) -> list[dict[str, Any]]
 
 
 def convert_tools_to_chat_completions(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    converted = []
-    for tool in tools:
-        converted.append(
-            {
-                "type": "function",
-                "function": {
-                    "name": tool["name"],
-                    "description": tool.get("description", ""),
-                    "parameters": tool.get("input_schema") or tool.get("parameters") or {"type": "object"},
-                },
-            }
-        )
-    return converted
+    return [tool_to_chat_completions_schema(tool, provider="openai", api_mode="chat_completions") for tool in tools]
 
 
 def convert_messages_to_chat_completions(
