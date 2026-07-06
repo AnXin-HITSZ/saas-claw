@@ -73,6 +73,19 @@ class AgentRunResponse(BaseModel):
 app = FastAPI(title="pyclaw API", version="0.1.0")
 
 
+def require_api_token(authorization: str | None = Header(default=None)) -> None:
+    expected = os.environ.get("PYCLAW_API_TOKEN")
+    if not expected:
+        return
+
+    prefix = "Bearer "
+    if not authorization or not authorization.startswith(prefix):
+        raise HTTPException(status_code=401, detail="Missing API token")
+
+    token = authorization[len(prefix) :]
+    if not hmac.compare_digest(token, expected):
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
 @app.get("/healthz", response_model=HealthResponse)
 def healthz() -> HealthResponse:
     return HealthResponse()
@@ -94,20 +107,6 @@ async def run_agent(
         message=message_to_dict(message),
         text=assistant_text(message),
     )
-
-
-def require_api_token(authorization: str | None = Header(default=None)) -> None:
-    expected = os.environ.get("PYCLAW_API_TOKEN")
-    if not expected:
-        return
-
-    prefix = "Bearer "
-    if not authorization or not authorization.startswith(prefix):
-        raise HTTPException(status_code=401, detail="Missing API token")
-
-    token = authorization[len(prefix) :]
-    if not hmac.compare_digest(token, expected):
-        raise HTTPException(status_code=401, detail="Invalid API token")
 
 
 async def run_agent_request(request: AgentRunRequest) -> tuple[AssistantMessage, str]:
