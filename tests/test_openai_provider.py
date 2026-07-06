@@ -3,6 +3,7 @@ import unittest
 from openclaw.llm.openai_provider import (
     OpenAIProvider,
     assistant_from_openai_response,
+    convert_messages_to_chat_completions,
     convert_messages_to_openai_input,
     convert_tools_to_openai,
     resolve_api_mode,
@@ -98,6 +99,19 @@ class OpenAIProviderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(converted[1]["call_id"], "call_1")
         self.assertEqual(converted[2]["type"], "function_call_output")
         self.assertEqual(converted[2]["output"], "contents")
+
+    def test_convert_messages_to_chat_completions_skips_empty_assistant(self) -> None:
+        converted = convert_messages_to_chat_completions(
+            "You are helpful.",
+            [
+                {"role": "user", "content": [{"type": "text", "text": "hi"}]},
+                message_to_dict(AssistantMessage(content=[], stop_reason="error", error_message="boom")),
+                {"role": "user", "content": [{"type": "text", "text": "try again"}]},
+            ],
+        )
+
+        self.assertEqual([item["role"] for item in converted], ["system", "user", "user"])
+        self.assertNotIn({"role": "assistant", "content": None}, converted)
 
     def test_assistant_from_response_extracts_text_and_function_call(self) -> None:
         response = {
@@ -213,3 +227,4 @@ class OpenAIProviderTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

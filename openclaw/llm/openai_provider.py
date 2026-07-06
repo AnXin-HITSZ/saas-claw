@@ -313,6 +313,8 @@ def convert_messages_to_chat_completions(
                 )
 
         if role == "assistant":
+            if not text_parts and not tool_calls:
+                continue
             item: dict[str, Any] = {"role": "assistant", "content": "\n".join(text_parts) or None}
             if tool_calls:
                 item["tool_calls"] = tool_calls
@@ -526,3 +528,4 @@ def _stringify_tool_output(output: Any) -> str:
     if isinstance(output, str):
         return output
     return json.dumps(output, ensure_ascii=False)
+
