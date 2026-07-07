@@ -8,12 +8,31 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 
 @Component
 public class PyclawClient {
+    private static final Set<String> HOP_BY_HOP_HEADERS = Set.of(
+            "connection",
+            "content-length",
+            "expect",
+            "host",
+            "keep-alive",
+            "proxy-authenticate",
+            "proxy-authorization",
+            "te",
+            "trailer",
+            "transfer-encoding",
+            "upgrade"
+    );
+
     private final PyclawRuntimeProperties properties;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
@@ -36,9 +55,7 @@ public class PyclawClient {
                     .timeout(Duration.ofSeconds(properties.readTimeoutSeconds()))
                     .header(HttpHeaders.CONTENT_TYPE, "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(body));
-            if (properties.apiToken() != null && !properties.apiToken().isBlank()) {
-                builder.header(HttpHeaders.AUTHORIZATION, "Bearer " + properties.apiToken());
-            }
+            addInternalAuthorization(builder);
             HttpResponse<String> response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 throw new ApiException(HttpStatus.BAD_GATEWAY, "pyclaw call failed: " + response.body());
@@ -48,6 +65,88 @@ public class PyclawClient {
             throw exc;
         } catch (Exception exc) {
             throw new ApiException(HttpStatus.BAD_GATEWAY, "pyclaw call failed: " + exc.getMessage());
+        }
+    }
+
+    public ResponseEntity<byte[]> forwardChannelWebhook(
+            String channel,
+            String queryString,
+            byte[] body,
+            String method,
+            Map<String, List<String>> incomingHeaders
+    ) {
+        try {
+            URI uri = URI.create(webhookUrl(channel, queryString));
+            HttpRequest.Builder builder = HttpRequest.newBuilder()
+                    .uri(uri)
+                    .version(HttpClient.Version.HTTP_1_1)
+                    .timeout(Duration.ofSeconds(properties.readTimeoutSeconds()));
+            copyForwardableHeaders(builder, incomingHeaders);
+            addInternalAuthorization(builder);
+
+            byte[] requestBody = body == null ? new byte[0] : body;
+            if ("GET".equalsIgnoreCase(method)) {
+                builder.GET();
+            } else {
+                builder.method(method.toUpperCase(Locale.ROOT), HttpRequest.BodyPublishers.ofByteArray(requestBody));
+            }
+
+            HttpResponse<byte[]> response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray());
+            HttpHeaders responseHeaders = new HttpHeaders();
+            response.headers().map().forEach((name, values) -> {
+                if (isForwardableResponseHeader(name)) {
+                    responseHeaders.put(name, values);
+                }
+            });
+            return ResponseEntity.status(response.statusCode()).headers(responseHeaders).body(response.body());
+        } catch (Exception exc) {
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "pyclaw webhook proxy failed: " + exc.getMessage());
+        }
+    }
+
+    private String webhookUrl(String channel, String queryString) {
+        String url = trimTrailingSlash(properties.baseUrl()) + "/v1/channels/" + channel + "/webhook";
+        if (queryString != null && !queryString.isBlank()) {
+            return url + "?" + queryString;
+        }
+        return url;
+    }
+
+    private void copyForwardableHeaders(HttpRequest.Builder builder, Map<String, List<String>> incomingHeaders) {
+        if (incomingHeaders == null) {
+            return;
+        }
+        incomingHeaders.forEach((name, values) -> {
+            if (!isForwardableRequestHeader(name) || values == null) {
+                return;
+            }
+            for (String value : values) {
+                if (value != null) {
+                    builder.header(name, value);
+                }
+            }
+        });
+    }
+
+    private boolean isForwardableRequestHeader(String name) {
+        if (name == null) {
+            return false;
+        }
+        String lower = name.toLowerCase(Locale.ROOT);
+        return !HOP_BY_HOP_HEADERS.contains(lower) && !HttpHeaders.AUTHORIZATION.equalsIgnoreCase(name);
+    }
+
+    private boolean isForwardableResponseHeader(String name) {
+        if (name == null) {
+            return false;
+        }
+        String lower = name.toLowerCase(Locale.ROOT);
+        return !HOP_BY_HOP_HEADERS.contains(lower);
+    }
+
+    private void addInternalAuthorization(HttpRequest.Builder builder) {
+        if (properties.apiToken() != null && !properties.apiToken().isBlank()) {
+            builder.header(HttpHeaders.AUTHORIZATION, "Bearer " + properties.apiToken());
         }
     }
 

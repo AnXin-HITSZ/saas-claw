@@ -40,7 +40,16 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/", "/index.html", "/assets/**", "/api/auth/login", "/actuator/health", "/healthz").permitAll()
+                        .requestMatchers(
+                                "/",
+                                "/index.html",
+                                "/assets/**",
+                                "/api/auth/login",
+                                "/api/webhooks/wechat",
+                                "/api/webhooks/feishu",
+                                "/actuator/health",
+                                "/healthz"
+                        ).permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(bearerFilter, UsernamePasswordAuthenticationFilter.class)
