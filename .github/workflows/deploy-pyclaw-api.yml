@@ -10,6 +10,7 @@ on:
       - "Dockerfile"
       - "pyproject.toml"
       - ".dockerignore"
+      - "pyclaw-api-ingressqueue-mysql-values-k3s.yaml"
       - ".github/workflows/deploy-pyclaw-api.yml"
   workflow_dispatch:
 
@@ -54,6 +55,7 @@ jobs:
               -n pyclaw \
               --create-namespace \
               -f pyclaw-values-k3s.yaml \
-              --set image.repository=${{ secrets.ACR_REGISTRY }}/${{ env.IMAGE_NAME }} \
-              --set image.tag=${{ env.IMAGE_TAG }}
+              -f pyclaw-api-ingressqueue-mysql-values-k3s.yaml \
+              --set-string image.repository=${{ secrets.ACR_REGISTRY }}/${{ env.IMAGE_NAME }} \
+              --set-string image.tag=${{ env.IMAGE_TAG }}
           "
