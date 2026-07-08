@@ -232,6 +232,19 @@ class PlatformAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(prepared.sender_id, "ou_1")
         self.assertEqual(prepared.text, "hello")
 
+    async def test_feishu_url_verification_accepts_nested_challenge(self) -> None:
+        payload = {
+            "schema": "2.0",
+            "header": {"event_id": "evt-verify", "tenant_key": "tenant", "token": "verify-token"},
+            "event": {"challenge": "challenge-code"},
+        }
+        config = ChannelRuntimeConfig("feishu", config={"verification_token": "verify-token"})
+
+        envelope = build_feishu_webhook_event(config=config, headers={}, body=json.dumps(payload).encode())
+
+        self.assertIsNone(envelope.event)
+        self.assertEqual(envelope.challenge, "challenge-code")
+
     async def test_feishu_text_and_card_send(self) -> None:
         client = FakeHttpClient()
         adapter = FeishuTextSendAdapter(

@@ -161,10 +161,10 @@ def build_feishu_webhook_event(
     actual_token = _optional_str(header.get("token") or payload.get("token"))
     if expected_token and actual_token != expected_token:
         raise FeishuWebhookError("invalid Feishu verification token")
-    challenge = _optional_str(payload.get("challenge"))
+    event_body = _feishu_event_body(payload)
+    challenge = _feishu_challenge(payload, event_body)
     if challenge:
         return FeishuWebhookEnvelope(event=None, challenge=challenge)
-    event_body = _feishu_event_body(payload)
     message = event_body.get("message") if isinstance(event_body.get("message"), dict) else event_body
     chat_id = str(message.get("chat_id") or payload.get("open_chat_id") or "unknown")
     event_id = _feishu_event_id(payload, message)
@@ -229,6 +229,9 @@ def _parse_json_object(body: bytes) -> dict[str, Any]:
         raise FeishuWebhookError("Feishu webhook body must be a JSON object")
     return value
 
+
+def _feishu_challenge(payload: dict[str, Any], event_body: dict[str, Any]) -> str | None:
+    return _optional_str(payload.get("challenge") or event_body.get("challenge"))
 
 def _feishu_event_body(payload: dict[str, Any]) -> dict[str, Any]:
     event = payload.get("event")
