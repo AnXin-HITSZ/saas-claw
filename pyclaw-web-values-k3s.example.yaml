@@ -1,0 +1,26 @@
+# Example K3s values for pyclaw-web.
+# Copy to pyclaw-web-values-k3s.yaml on the server and replace placeholders there.
+
+image:
+  repository: <ACR_REGISTRY>/pyclaw/pyclaw-web
+  tag: "__COMMIT_SHA__"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: aliyun-acr-pull-secret
+
+backend:
+  upstream: pyclaw-spring-backend.pyclaw.svc.cluster.local:8080
+
+ingress:
+  enabled: true
+  className: traefik
+  hosts:
+    - host: pyclaw.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: pyclaw-example-com-tls
+      hosts:
+        - pyclaw.example.com

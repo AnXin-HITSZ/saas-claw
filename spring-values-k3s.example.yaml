@@ -1,0 +1,39 @@
+# Example K3s values for Spring Backend.
+# Copy to spring-values-k3s.yaml on the server and replace placeholders there.
+# Store JWT, admin password, pyclaw token, and datasource password in the Secret.
+
+image:
+  repository: <ACR_REGISTRY>/pyclaw/spring-backend
+  tag: "__COMMIT_SHA__"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: aliyun-acr-pull-secret
+
+secret:
+  create: false
+  existingSecret: pyclaw-spring-backend-secret
+
+env:
+  SPRING_DATASOURCE_URL: jdbc:mysql://pyclaw-mysql:3306/pyclaw?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+  SPRING_DATASOURCE_USERNAME: pyclaw
+  SPRING_JPA_DDL_AUTO: update
+  PYCLAW_BASE_URL: http://pyclaw.pyclaw.svc.cluster.local:8000
+  BOOTSTRAP_ADMIN_USERNAME: admin
+
+ingress:
+  enabled: true
+  className: traefik
+  hosts:
+    - host: api.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: api-example-com-tls
+      hosts:
+        - api.example.com
+
+persistence:
+  enabled: true
+  size: 2Gi

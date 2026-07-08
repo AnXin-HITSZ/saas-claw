@@ -13,3 +13,10 @@ spring-backend/data/
 spring-backend/maven-repository/
 pyclaw-web/node_modules/
 pyclaw-web/dist/
+# K3s production values and secrets. Commit *.example.yaml templates instead.
+pyclaw-values-k3s.yaml
+spring-values-k3s.yaml
+values-k3s.yaml
+values-k3s.yaml.bak
+*.secret.yaml
+certs/

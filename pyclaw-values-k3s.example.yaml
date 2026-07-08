@@ -1,0 +1,48 @@
+# Example K3s values for pyclaw-api.
+# Copy to pyclaw-values-k3s.yaml on the server and replace placeholders there.
+# Do not put real API keys, provider secrets, or database DSNs in this file.
+
+image:
+  repository: <ACR_REGISTRY>/pyclaw/pyclaw-api
+  tag: "__COMMIT_SHA__"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: aliyun-acr-pull-secret
+
+secret:
+  create: false
+  existingSecret: pyclaw-provider-secret
+
+env:
+  OPENCLAW_CHATDATA_DIR: /app/chatdata
+  OPENAI_MODEL: deepseek-v4-flash
+  OPENAI_API_MODE: chat_completions
+
+  OPENCLAW_CHANNEL_PROVIDER: openai
+  OPENCLAW_CHANNEL_API_MODE: auto
+  OPENCLAW_CHANNEL_TOOL_PROFILE: messaging
+  OPENCLAW_CHANNEL_SHELL_APPROVAL: deny
+  OPENCLAW_CHANNEL_WEBHOOK_SYNC: "false"
+  OPENCLAW_CHANNEL_CONFIG_SOURCE: spring
+  OPENCLAW_SPRING_BACKEND_BASE_URL: http://pyclaw-spring-backend.pyclaw.svc.cluster.local:8080
+  OPENCLAW_CHANNEL_CONFIG_TIMEOUT_SECONDS: "3"
+
+  OPENCLAW_WECHAT_ENABLED: "false"
+  OPENCLAW_WECHAT_NAME: wechat
+  OPENCLAW_FEISHU_ENABLED: "false"
+  OPENCLAW_FEISHU_NAME: feishu
+
+ingressQueue:
+  enabled: true
+  staleAfterSeconds: 300
+  mysql:
+    dsnSecretName: pyclaw-ingress-queue-secret
+    dsnSecretKey: OPENCLAW_INGRESS_QUEUE_DSN
+
+ingress:
+  enabled: false
+
+persistence:
+  enabled: true
+  size: 5Gi
