@@ -40,6 +40,14 @@ ingressQueue:
     dsnSecretName: pyclaw-ingress-queue-secret
     dsnSecretKey: OPENCLAW_INGRESS_QUEUE_DSN
 
+worker:
+  enabled: true
+  replicaCount: 1
+  channels: wechat,feishu
+  pollIntervalSeconds: 0.5
+  ownerId: pyclaw-channel-worker
+  logLevel: INFO
+
 ingress:
   enabled: false
 

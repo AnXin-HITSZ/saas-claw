@@ -85,6 +85,21 @@ ingressQueue:
     dsnSecretName: ""
     dsnSecretKey: OPENCLAW_INGRESS_QUEUE_DSN
 
+worker:
+  enabled: false
+  replicaCount: 1
+  channels: wechat,feishu
+  pollIntervalSeconds: 1
+  ownerId: pyclaw-channel-worker
+  logLevel: INFO
+  extraEnv: []
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
 secret:
   create: true
   existingSecret: ""

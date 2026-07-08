@@ -19,6 +19,7 @@ all = ["openai>=1.68.0", "fastapi>=0.115.0", "uvicorn[standard]>=0.30.0", "httpx
 [project.scripts]
 pyclaw = "openclaw.__main__:main"
 openclaw = "openclaw.__main__:main"
+pyclaw-channel-worker = "openclaw.channels.worker_app:main"
 
 [tool.setuptools.packages.find]
 include = ["openclaw*"]

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -11,6 +12,8 @@ from openclaw.channels.dispatcher import ChannelTurnDispatcher, ChannelTurnResul
 from openclaw.channels.message.adapter import ChannelMessageReceiveAdapter
 from openclaw.channels.message.ingress_queue import IngressQueue, IngressQueueClaim
 from openclaw.channels.message.types import ChannelMessageReceiveAckPolicy, RawInboundEvent
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -41,15 +44,25 @@ class IngressQueueWorker:
         claim = self.queue.claim_next(self.owner_id, channel=self.channel)
         if claim is None:
             return None
+        channel = channel_from_claim(claim)
+        LOGGER.info("claimed ingress event: event_id=%s channel=%s owner_id=%s", claim.event_id, channel, self.owner_id)
         try:
             event = raw_event_from_claim(claim)
             adapter = self.receive_adapters[event.channel]
             prepared = await adapter.prepare(event)
             turn = await self.dispatcher.dispatch(prepared)
             completed = self.queue.complete(claim)
+            LOGGER.info(
+                "completed ingress event: event_id=%s channel=%s session_id=%s sent=%s",
+                claim.event_id,
+                event.channel,
+                turn.session_id,
+                turn.send_result is not None,
+            )
             return IngressWorkerResult(claim=claim, turn=turn, completed=completed)
         except BaseException as exc:
             self.queue.fail(claim, error=str(exc))
+            LOGGER.exception("failed ingress event: event_id=%s channel=%s", claim.event_id, channel)
             return IngressWorkerResult(claim=claim, error=str(exc))
 
     async def run_forever(self, *, idle_sleep_seconds: float = 1.0, stop: asyncio.Event | None = None) -> None:
@@ -57,6 +70,14 @@ class IngressQueueWorker:
             result = await self.process_one()
             if result is None:
                 await asyncio.sleep(idle_sleep_seconds)
+
+
+def channel_from_claim(claim: IngressQueueClaim) -> str:
+    payload = dict(claim.payload)
+    event = payload.get("raw_event")
+    if isinstance(event, dict):
+        return str(event.get("channel") or payload.get("channel") or "unknown")
+    return str(payload.get("channel") or "unknown")
 
 
 def raw_event_from_claim(claim: IngressQueueClaim) -> RawInboundEvent:
