@@ -7,6 +7,9 @@ public record PyclawAgentRunRequest(
         String provider,
         @JsonProperty("session_id") String sessionId,
         @JsonProperty("tool_profile") String toolProfile,
-        String model
+        String model,
+        @JsonProperty("api_mode") String apiMode,
+        @JsonProperty("base_url") String baseUrl,
+        @JsonProperty("api_key") String apiKey
 ) {
 }

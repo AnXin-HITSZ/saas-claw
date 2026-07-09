@@ -49,6 +49,8 @@ class AgentRunRequest(BaseModel):
     session_id: str | None = None
     provider: ApiProviderName = "openai"
     model: str | None = None
+    api_key: str | None = None
+    base_url: str | None = None
     system: str = DEFAULT_SYSTEM_PROMPT
     api_mode: ApiMode = "auto"
     reasoning_effort: Literal["low", "medium", "high"] | None = None
@@ -205,9 +207,13 @@ def build_provider(request: AgentRunRequest, *, model: str) -> Any:
         )
 
     if request.provider == "openai":
-        if not os.environ.get("OPENAI_API_KEY"):
-            raise ValueError("OPENAI_API_KEY is not set. Provide it through a Kubernetes Secret or local .env file.")
-        return OpenAIProvider(api_mode=normalize_api_mode(request.api_mode))
+        if not (request.api_key or os.environ.get("OPENAI_API_KEY")):
+            raise ValueError("OPENAI_API_KEY is not set. Provide it through a Kubernetes Secret, local .env file, or provider config.")
+        return OpenAIProvider(
+            api_key=request.api_key,
+            base_url=request.base_url,
+            api_mode=normalize_api_mode(request.api_mode),
+        )
 
     raise ValueError(f"unsupported provider: {request.provider}")
 

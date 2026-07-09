@@ -21,6 +21,8 @@ public class ProviderConfigEntity {
     @Column(nullable = false)
     private String apiMode;
     private String secretRef;
+    @Column(length = 4096)
+    private String apiKey;
     @Column(nullable = false)
     private boolean enabled;
     @Column(nullable = false)
@@ -42,6 +44,8 @@ public class ProviderConfigEntity {
     public void setApiMode(String apiMode) { this.apiMode = apiMode; }
     public String getSecretRef() { return secretRef; }
     public void setSecretRef(String secretRef) { this.secretRef = secretRef; }
+    public String getApiKey() { return apiKey; }
+    public void setApiKey(String apiKey) { this.apiKey = apiKey; }
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
     public OffsetDateTime getCreatedAt() { return createdAt; }

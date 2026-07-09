@@ -230,7 +230,7 @@
             <div class="panel-title">
               <div>
                 <h2>{{ providerForm.id ? "编辑 Provider" : "创建 Provider" }}</h2>
-                <p>配置模型网关、默认模型与密钥引用。</p>
+                <p>配置模型网关、默认模型与 API Key。</p>
               </div>
               <div>
                 <button v-if="providerForm.id" type="button" @click="resetProviderForm">取消编辑</button>
@@ -263,6 +263,19 @@
             <label>
               Secret Ref
               <input v-model="providerForm.secretRef" />
+            </label>
+            <label>
+              API Key
+              <input
+                v-model="providerForm.apiKey"
+                type="password"
+                autocomplete="off"
+                :placeholder="providerForm.apiKeyConfigured ? '已保存，留空表示不修改' : '粘贴 DeepSeek API Key'"
+              />
+            </label>
+            <label v-if="providerForm.id && providerForm.apiKeyConfigured" class="checkline">
+              <input v-model="providerForm.clearApiKey" type="checkbox" />
+              删除已保存 API Key
             </label>
             <label class="checkline">
               <input v-model="providerForm.enabled" type="checkbox" />
@@ -452,7 +465,7 @@ const currentSubtitle = computed(() => {
 
 const tokenColumns = ["name", "scopes", "expiresAt", "revokedAt", "createdAt", "lastUsedAt"];
 const userColumns = ["username", "displayName", "status", "authorities", "createdAt", "updatedAt"];
-const providerColumns = ["name", "providerType", "baseUrl", "model", "apiMode", "secretRef", "enabled"];
+const providerColumns = ["name", "providerType", "baseUrl", "model", "apiMode", "secretRef", "apiKeyConfigured", "enabled"];
 const channelColumns = ["channelType", "name", "configJson", "secretRef", "enabled", "updatedAt"];
 const auditColumns = ["createdAt", "actorType", "actorId", "action", "resourceType", "resourceId", "success", "errorMessage"];
 const usageColumns = ["createdAt", "userId", "sessionId", "provider", "model", "totalTokens", "success", "latencyMs"];
@@ -538,6 +551,9 @@ function defaultProviderForm() {
     model: "deepseek-chat",
     apiMode: "chat_completions",
     secretRef: "pyclaw-provider-secret",
+    apiKey: "",
+    clearApiKey: false,
+    apiKeyConfigured: false,
     enabled: true
   };
 }
@@ -755,7 +771,7 @@ async function loadProviders() {
 }
 
 function editProvider(row) {
-  Object.assign(providerForm, row);
+  Object.assign(providerForm, row, { apiKey: "", clearApiKey: false });
 }
 
 function resetProviderForm() {
@@ -771,6 +787,8 @@ async function saveProvider() {
       model: providerForm.model,
       apiMode: providerForm.apiMode,
       secretRef: providerForm.secretRef || null,
+      apiKey: providerForm.apiKey || null,
+      clearApiKey: providerForm.clearApiKey,
       enabled: providerForm.enabled
     };
     const path = providerForm.id ? `/api/providers/${providerForm.id}` : "/api/providers";

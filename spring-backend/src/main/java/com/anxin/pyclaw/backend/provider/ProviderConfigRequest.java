@@ -9,6 +9,8 @@ public record ProviderConfigRequest(
         @NotBlank String model,
         @NotBlank String apiMode,
         String secretRef,
+        String apiKey,
+        boolean clearApiKey,
         boolean enabled
 ) {
 }

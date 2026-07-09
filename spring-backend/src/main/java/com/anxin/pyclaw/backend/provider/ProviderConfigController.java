@@ -27,30 +27,32 @@ public class ProviderConfigController {
 
     @GetMapping
     @PreAuthorize("hasAuthority('provider:manage') or hasAuthority('agent:run')")
-    public List<ProviderConfigEntity> list() {
-        return repository.findAll();
+    public List<ProviderConfigResponse> list() {
+        return repository.findAll().stream()
+                .map(ProviderConfigResponse::from)
+                .toList();
     }
 
     @PostMapping
     @PreAuthorize("hasAuthority('provider:manage')")
-    public ProviderConfigEntity create(@Valid @RequestBody ProviderConfigRequest request) {
+    public ProviderConfigResponse create(@Valid @RequestBody ProviderConfigRequest request) {
         OffsetDateTime now = OffsetDateTime.now();
         ProviderConfigEntity entity = new ProviderConfigEntity();
         entity.setId(UUID.randomUUID().toString());
         apply(entity, request);
         entity.setCreatedAt(now);
         entity.setUpdatedAt(now);
-        return repository.save(entity);
+        return ProviderConfigResponse.from(repository.save(entity));
     }
 
     @PutMapping("/{id}")
     @PreAuthorize("hasAuthority('provider:manage')")
-    public ProviderConfigEntity update(@PathVariable String id, @Valid @RequestBody ProviderConfigRequest request) {
+    public ProviderConfigResponse update(@PathVariable String id, @Valid @RequestBody ProviderConfigRequest request) {
         ProviderConfigEntity entity = repository.findById(id)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Provider config not found"));
         apply(entity, request);
         entity.setUpdatedAt(OffsetDateTime.now());
-        return repository.save(entity);
+        return ProviderConfigResponse.from(repository.save(entity));
     }
 
     @DeleteMapping("/{id}")
@@ -66,6 +68,12 @@ public class ProviderConfigController {
         entity.setModel(request.model());
         entity.setApiMode(request.apiMode());
         entity.setSecretRef(request.secretRef());
+        if (request.clearApiKey()) {
+            entity.setApiKey(null);
+        }
+        if (request.apiKey() != null && !request.apiKey().isBlank()) {
+            entity.setApiKey(request.apiKey().trim());
+        }
         entity.setEnabled(request.enabled());
     }
 }

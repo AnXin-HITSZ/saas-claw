@@ -5,6 +5,8 @@ import com.anxin.pyclaw.backend.auth.AuthenticatedPrincipal;
 import com.anxin.pyclaw.backend.pyclaw.PyclawAgentRunRequest;
 import com.anxin.pyclaw.backend.pyclaw.PyclawAgentRunResponse;
 import com.anxin.pyclaw.backend.pyclaw.PyclawClient;
+import com.anxin.pyclaw.backend.provider.ProviderConfigEntity;
+import com.anxin.pyclaw.backend.provider.ProviderConfigRepository;
 import com.anxin.pyclaw.backend.usage.UsageRecordEntity;
 import com.anxin.pyclaw.backend.usage.UsageRecordRepository;
 import java.time.OffsetDateTime;
@@ -17,23 +19,38 @@ public class AgentService {
     private final PyclawClient pyclawClient;
     private final AuditLogService auditLogService;
     private final UsageRecordRepository usageRecords;
+    private final ProviderConfigRepository providerConfigs;
 
-    public AgentService(PyclawClient pyclawClient, AuditLogService auditLogService, UsageRecordRepository usageRecords) {
+    public AgentService(
+            PyclawClient pyclawClient,
+            AuditLogService auditLogService,
+            UsageRecordRepository usageRecords,
+            ProviderConfigRepository providerConfigs
+    ) {
         this.pyclawClient = pyclawClient;
         this.auditLogService = auditLogService;
         this.usageRecords = usageRecords;
+        this.providerConfigs = providerConfigs;
     }
 
     public AgentRunResponse run(AuthenticatedPrincipal principal, AgentRunRequest request) {
         long started = System.nanoTime();
         boolean success = false;
+        ProviderConfigEntity providerConfig = resolveProviderConfig(request.provider());
+        String provider = providerConfig == null ? defaultProvider(request.provider()) : pyclawProvider(providerConfig.getProviderType());
+        String model = request.model() != null && !request.model().isBlank()
+                ? request.model()
+                : providerConfig == null ? null : providerConfig.getModel();
         try {
             PyclawAgentRunResponse response = pyclawClient.runAgent(new PyclawAgentRunRequest(
                     request.prompt(),
-                    request.provider() == null ? "openai" : request.provider(),
+                    provider,
                     request.sessionId(),
                     request.toolProfile() == null ? "minimal" : request.toolProfile(),
-                    request.model()
+                    model,
+                    providerConfig == null ? "auto" : providerConfig.getApiMode(),
+                    providerConfig == null ? null : providerConfig.getBaseUrl(),
+                    providerConfig == null ? null : providerConfig.getApiKey()
             ));
             long latencyMs = (System.nanoTime() - started) / 1_000_000;
             success = true;
@@ -68,5 +85,32 @@ public class AgentService {
 
     private Long numberValue(Object value) {
         return value instanceof Number number ? number.longValue() : null;
+    }
+
+    private ProviderConfigEntity resolveProviderConfig(String requestedProvider) {
+        if (requestedProvider == null || requestedProvider.isBlank()) {
+            ProviderConfigEntity compatible = providerConfigs.findFirstByProviderTypeIgnoreCaseAndEnabledTrue("openai-compatible");
+            return compatible == null ? providerConfigs.findFirstByProviderTypeIgnoreCaseAndEnabledTrue("openai") : compatible;
+        }
+        ProviderConfigEntity byName = providerConfigs.findFirstByNameIgnoreCaseAndEnabledTrue(requestedProvider);
+        if (byName != null) {
+            return byName;
+        }
+        ProviderConfigEntity byType = providerConfigs.findFirstByProviderTypeIgnoreCaseAndEnabledTrue(requestedProvider);
+        if (byType != null) {
+            return byType;
+        }
+        if ("openai".equalsIgnoreCase(requestedProvider)) {
+            return providerConfigs.findFirstByProviderTypeIgnoreCaseAndEnabledTrue("openai-compatible");
+        }
+        return null;
+    }
+
+    private String defaultProvider(String requestedProvider) {
+        return requestedProvider == null || requestedProvider.isBlank() ? "openai" : pyclawProvider(requestedProvider);
+    }
+
+    private String pyclawProvider(String providerType) {
+        return "openai-compatible".equalsIgnoreCase(providerType) ? "openai" : providerType;
     }
 }
