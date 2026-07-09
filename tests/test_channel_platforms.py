@@ -297,6 +297,18 @@ class PlatformAdapterTests(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaisesRegex(FeishuWebhookError, "requires encrypt_key"):
             build_feishu_webhook_event(config=config, headers={}, body=body)
+    @unittest.skipIf(padding is None, "cryptography extra is not installed")
+    async def test_feishu_encrypted_payload_rejects_wrong_encrypt_key(self) -> None:
+        payload = {
+            "schema": "2.0",
+            "header": {"event_id": "evt-verify", "tenant_key": "tenant", "token": "verify-token"},
+            "event": {"challenge": "encrypted-challenge"},
+        }
+        body = json.dumps(encrypt_feishu_payload(payload, "encrypt-key")).encode()
+        config = ChannelRuntimeConfig("feishu", config={"encrypt_key": "wrong-key"})
+
+        with self.assertRaisesRegex(FeishuWebhookError, "invalid encrypted Feishu webhook payload"):
+            build_feishu_webhook_event(config=config, headers={}, body=body)
 
     async def test_feishu_text_and_card_send(self) -> None:
         client = FakeHttpClient()

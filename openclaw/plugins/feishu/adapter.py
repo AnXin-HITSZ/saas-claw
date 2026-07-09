@@ -225,7 +225,12 @@ def _verify_feishu_headers(config: ChannelRuntimeConfig, headers: dict[str, str]
 
 
 def _parse_json_object(body: bytes) -> dict[str, Any]:
-    value = json.loads(body.decode("utf-8-sig") or "{}")
+    try:
+        value = json.loads(body.decode("utf-8-sig") or "{}")
+    except UnicodeDecodeError as exc:
+        raise FeishuWebhookError("Feishu webhook body must be UTF-8 JSON") from exc
+    except json.JSONDecodeError as exc:
+        raise FeishuWebhookError("Feishu webhook body must be valid JSON") from exc
     if not isinstance(value, dict):
         raise FeishuWebhookError("Feishu webhook body must be a JSON object")
     return value
@@ -254,7 +259,10 @@ def _decrypt_feishu_payload(config: ChannelRuntimeConfig, payload: dict[str, Any
         plain = unpadder.update(padded) + unpadder.finalize()
     except (ValueError, binascii.Error) as exc:
         raise FeishuWebhookError("invalid encrypted Feishu webhook payload") from exc
-    return _parse_json_object(plain)
+    try:
+        return _parse_json_object(plain)
+    except FeishuWebhookError as exc:
+        raise FeishuWebhookError("invalid encrypted Feishu webhook payload") from exc
 
 
 def _feishu_challenge(payload: dict[str, Any], event_body: dict[str, Any]) -> str | None:
