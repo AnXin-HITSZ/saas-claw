@@ -1090,3 +1090,49 @@ export interface ChannelConfig {
   updatedAt: string;
 }
 ```
+
+---
+
+## Provider Options 补充接口
+
+### 脱敏 Provider 选择列表
+
+```http
+GET /api/providers/options
+```
+
+权限：
+
+```text
+provider:manage 或 agent:read 或 agent:update
+```
+
+用途：
+
+```text
+供 Agents 页面 Provider Config 下拉框使用。
+该接口只用于选择已有 Provider，不用于管理 Provider 密钥。
+```
+
+响应：
+
+```json
+[
+  {
+    "id": "uuid",
+    "name": "deepseek-main",
+    "providerType": "openai-compatible",
+    "model": "deepseek-chat",
+    "apiMode": "chat_completions",
+    "enabled": true
+  }
+]
+```
+
+安全约束：
+
+```text
+不返回 apiKey、baseUrl、secretRef、apiKeyLast4。
+provider:manage 用户仍通过 GET/POST/PUT/DELETE /api/providers 管理完整 Provider 配置。
+agent:update 用户只通过 providerId 修改 Agent 与 Provider 的绑定关系。
+```

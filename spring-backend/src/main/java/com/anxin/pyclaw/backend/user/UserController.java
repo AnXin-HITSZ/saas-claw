@@ -46,7 +46,7 @@ public class UserController {
         entity.setPasswordHash(passwordEncoder.encode(request.password()));
         entity.setDisplayName(request.displayName());
         entity.setStatus("ACTIVE");
-        entity.setAuthorities(request.authorities() == null || request.authorities().isBlank() ? "agent:run,token:manage_self" : request.authorities());
+        entity.setAuthorities(request.authorities() == null || request.authorities().isBlank() ? "agent:run,agent:read,token:manage_self" : request.authorities());
         entity.setCreatedAt(now);
         entity.setUpdatedAt(now);
         return repository.save(entity);

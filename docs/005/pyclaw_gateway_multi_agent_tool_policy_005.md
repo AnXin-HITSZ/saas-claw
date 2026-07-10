@@ -1558,3 +1558,68 @@ SpringBoot 权限矩阵校验
 ```
 
 完成这些后，飞书群中引入多个 Agent、每个 Agent 拥有不同角色和工具权限，就可以形成稳定、可审计、可扩展的生产架构。
+
+---
+
+## 14. Provider Options 与 Agent 绑定权限补充
+
+本次实现补充了一个脱敏 Provider 选择接口，用于支持 `agent:read` / `agent:update` 用户在 Agents 页面选择已有 Provider Config，而不需要授予 `provider:manage`。
+
+### 14.1 新增接口
+
+```text
+GET /api/providers/options
+```
+
+权限：
+
+```text
+provider:manage 或 agent:read 或 agent:update
+```
+
+返回字段：
+
+```json
+[
+  {
+    "id": "provider-uuid",
+    "name": "deepseek-main",
+    "providerType": "openai-compatible",
+    "model": "deepseek-chat",
+    "apiMode": "chat_completions",
+    "enabled": true
+  }
+]
+```
+
+该接口不返回以下敏感或管理字段：
+
+```text
+apiKey
+baseUrl
+secretRef
+apiKeyLast4
+createdAt
+updatedAt
+```
+
+### 14.2 权限语义
+
+`provider:manage` 仍然表示完整 Provider 管理权限，包括新增、修改、删除 Provider 以及更新 API Key。
+
+`agent:update` 表示可以修改 Agent 配置，包括 `providerId` 绑定关系；但它不应自动拥有 Provider 密钥管理能力。
+
+因此 Agents 页面使用 `/api/providers/options` 加载 Provider Config 下拉框，Providers 页面仍使用 `/api/providers` 完整管理接口。
+
+### 14.3 前端行为
+
+Agents 页面现在会：
+
+```text
+1. 调用 GET /api/providers/options 加载脱敏 Provider 选择列表。
+2. 在 Provider Config 下拉框中显示 Provider name + model。
+3. 保存 Agent 时提交 providerId。
+4. 在 Agents 表格中展示 providerConfigName，便于确认 Agent 是否绑定到具体 Provider。
+```
+
+这样普通 Agent 管理员无需 `provider:manage`，也可以完成 Agent 到已有 Provider 的绑定；同时不会接触 DeepSeek/OpenAI API Key。

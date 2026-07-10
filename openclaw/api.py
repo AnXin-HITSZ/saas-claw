@@ -21,10 +21,13 @@ from openclaw.cli import DEFAULT_MODEL, DEFAULT_SYSTEM_PROMPT, sanitize_session_
 from openclaw.config import load_env_file
 from openclaw.llm.openai_provider import OpenAIProvider
 from openclaw.llm.provider import MockProvider
+from openclaw.agents.runtime_config_client import AgentRuntimeConfig, AgentRuntimeToolPolicy, RuntimeConfigClient
 from openclaw.channels.config import load_channel_agent_config
 from openclaw.channels.dispatcher import build_channel_session_id
 from openclaw.channels.api_routes import create_channel_router
+from openclaw.channels.route_context import route_context_from_message
 from openclaw.llm.types import AssistantMessage, message_to_dict
+from openclaw.routing.resolve_route import resolve_agent_route
 from openclaw.session.agent_session import AgentSession, SessionContextPolicy
 from openclaw.session.context import CompactionSettings
 from openclaw.session.paths import resolve_chatdata_dir, resolve_session_store_path, resolve_session_transcript_path
@@ -90,23 +93,32 @@ def include_routes(target_app: FastAPI, router: Any) -> None:
 
 async def build_channel_agent_session(message: Any) -> AgentSession:
     load_env_file_if_configured()
-    channel_agent = load_channel_agent_config()
+    try:
+        runtime_config, session_id, route_metadata = load_routed_channel_agent_config(message)
+    except ValueError:
+        if not env_bool("OPENCLAW_CHANNEL_LEGACY_ROUTING_FALLBACK", default=True):
+            raise
+        runtime_config, session_id, route_metadata = load_legacy_channel_agent_config(message)
     request = AgentRunRequest(
         prompt="channel bootstrap",
-        session_id=build_channel_session_id(message),
-        provider=channel_agent.provider,
-        model=channel_agent.model,
-        system=channel_agent.system or DEFAULT_SYSTEM_PROMPT,
-        api_mode=channel_agent.api_mode,
-        chatdata_dir=channel_agent.chatdata_dir,
-        tool_profile=channel_agent.tool_profile,
-        shell_approval=channel_agent.shell_approval,
+        session_id=session_id,
+        provider=runtime_config.provider,  # type: ignore[arg-type]
+        model=runtime_config.model,
+        api_key=runtime_config.api_key,
+        base_url=runtime_config.base_url,
+        system=runtime_config.system or DEFAULT_SYSTEM_PROMPT,
+        api_mode=runtime_config.api_mode,  # type: ignore[arg-type]
+        chatdata_dir=os.environ.get("OPENCLAW_CHANNEL_CHATDATA_DIR"),
+        tool_profile=runtime_config.tool_policy.profile,  # type: ignore[arg-type]
+        tools_allow=runtime_config.tool_policy.allow,
+        tools_deny=runtime_config.tool_policy.deny,
+        tools_also_allow=runtime_config.tool_policy.also_allow,
+        shell_approval=runtime_config.tool_policy.shell_approval,  # type: ignore[arg-type]
     )
-    session_id = build_channel_session_id(message)
-    cwd = os.getcwd()
+    cwd = runtime_config.workspace_dir or os.getcwd()
     model = request.model or os.environ.get("OPENAI_MODEL") or DEFAULT_MODEL
     provider = build_provider(request, model=model)
-    policy = build_policy(request)
+    policy = build_policy_from_runtime(runtime_config)
     agent = Agent(
         model=model,
         provider=provider,
@@ -118,9 +130,63 @@ async def build_channel_agent_session(message: Any) -> AgentSession:
         workspace_dir=cwd,
         chatdata_dir=resolve_chatdata_dir(request.chatdata_dir),
         readonly=policy.readonly,
-        tool_metadata=build_tool_metadata(request),
+        tool_metadata={**build_tool_metadata(request), **route_metadata},
     )
     return build_session(request, agent, session_id=session_id, cwd=cwd)
+
+
+def load_routed_channel_agent_config(message: Any) -> tuple[AgentRuntimeConfig, str, dict[str, Any]]:
+    context = route_context_from_message(message)
+    client = RuntimeConfigClient()
+    route = resolve_agent_route(
+        context,
+        client.load_route_bindings(),
+        default_agent_key=os.environ.get("OPENCLAW_DEFAULT_AGENT_KEY", "default"),
+    )
+    runtime_config = client.load_agent_runtime_config(route.agent_key)
+    return runtime_config, route.session_key, {
+        "route_agent_id": route.agent_id,
+        "route_agent_key": route.agent_key,
+        "route_binding_id": route.binding_id,
+        "route_matched_by": route.matched_by,
+        "route_session_key": route.session_key,
+        "route_main_session_key": route.main_session_key,
+        "route_dm_scope": route.dm_scope,
+    }
+
+
+def load_legacy_channel_agent_config(message: Any) -> tuple[AgentRuntimeConfig, str, dict[str, Any]]:
+    channel_agent = load_channel_agent_config()
+    return (
+        AgentRuntimeConfig(
+            agent_id="legacy-channel",
+            agent_key="legacy-channel",
+            provider=channel_agent.provider,
+            model=channel_agent.model,
+            api_mode=channel_agent.api_mode,
+            system=channel_agent.system,
+            workspace_dir=os.getcwd(),
+            tool_policy=AgentRuntimeToolPolicy(
+                profile=channel_agent.tool_profile,
+                shell_approval=channel_agent.shell_approval,
+            ),
+        ),
+        build_channel_session_id(message),
+        {"route_matched_by": "legacy-fallback"},
+    )
+
+
+def build_policy_from_runtime(runtime_config: AgentRuntimeConfig) -> ToolPolicy:
+    tool_policy = runtime_config.tool_policy
+    profile = tool_policy.profile
+    return ToolPolicy(
+        profile=profile,  # type: ignore[arg-type]
+        allow=normalize_name_set(tool_policy.allow),
+        deny=normalize_name_set(tool_policy.deny) or set(),
+        also_allow=normalize_name_set(tool_policy.also_allow) or set(),
+        workspace_only=tool_policy.workspace_only,
+        readonly=tool_policy.readonly or profile == "readonly",
+    )
 
 
 include_routes(app, create_channel_router(session_factory=build_channel_agent_session))
@@ -191,6 +257,12 @@ def load_env_file_if_configured() -> None:
     if env_file:
         load_env_file(env_file)
 
+
+def env_bool(name: str, *, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 def build_provider(request: AgentRunRequest, *, model: str) -> Any:
     if request.provider == "mock":

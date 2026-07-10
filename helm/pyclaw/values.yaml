@@ -114,6 +114,11 @@ secret:
     OPENAI_ORGANIZATION: ""
     OPENAI_PROJECT: ""
     PYCLAW_API_TOKEN: ""
+    # Token used by pyclaw-api and channel-worker to read Spring Backend
+    # internal runtime config APIs. It should match Spring Backend
+    # secret.values.PYCLAW_INTERNAL_API_TOKEN.
+    OPENCLAW_RUNTIME_CONFIG_TOKEN: ""
+    OPENCLAW_INTERNAL_API_TOKEN: ""
 
     # WeChat channel secrets.
     OPENCLAW_WECHAT_ACCOUNT_ID: ""

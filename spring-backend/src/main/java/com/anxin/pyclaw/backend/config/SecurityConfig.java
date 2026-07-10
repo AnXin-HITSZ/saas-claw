@@ -48,6 +48,8 @@ public class SecurityConfig {
                                 "/api/webhooks/wechat",
                                 "/api/webhooks/feishu",
                                 "/api/internal/channels/**",
+                                "/api/internal/agents/**",
+                                "/api/internal/route-bindings/**",
                                 "/actuator/health",
                                 "/healthz"
                         ).permitAll()

@@ -25,6 +25,14 @@ public class ProviderConfigController {
         this.repository = repository;
     }
 
+
+    @GetMapping("/options")
+    @PreAuthorize("hasAuthority('provider:manage') or hasAuthority('agent:read') or hasAuthority('agent:update')")
+    public List<ProviderOptionResponse> options() {
+        return repository.findAll().stream()
+                .map(ProviderOptionResponse::from)
+                .toList();
+    }
     @GetMapping
     @PreAuthorize("hasAuthority('provider:manage') or hasAuthority('agent:run')")
     public List<ProviderConfigResponse> list() {
