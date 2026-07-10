@@ -1,4 +1,4 @@
-﻿package com.anxin.pyclaw.backend.provider;
+package com.anxin.pyclaw.backend.provider;
 
 public record ProviderOptionResponse(
         String id,

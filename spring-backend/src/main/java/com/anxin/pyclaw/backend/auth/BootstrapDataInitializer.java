@@ -1,4 +1,4 @@
-﻿package com.anxin.pyclaw.backend.auth;
+package com.anxin.pyclaw.backend.auth;
 
 import com.anxin.pyclaw.backend.config.PyclawSecurityProperties;
 import com.anxin.pyclaw.backend.user.UserEntity;
