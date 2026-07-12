@@ -7,6 +7,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssh-client \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN useradd --create-home --shell /usr/sbin/nologin pyclaw
 
 COPY pyproject.toml README.md ./
