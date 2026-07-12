@@ -17,7 +17,7 @@ public class ChannelConfigEntity {
     @Column(nullable = false)
     private String name;
     @Lob
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "LONGTEXT")
     private String configJson;
     private String secretRef;
     @Column(nullable = false)
