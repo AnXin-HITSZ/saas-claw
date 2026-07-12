@@ -82,7 +82,7 @@
             <h2>Create Token</h2>
             <label>Name<input v-model="tokenForm.name" /></label>
             <label>Expires<input v-model="tokenForm.expiresAt" /></label>
-            <label class="span-2">Scopes<input v-model="tokenForm.scopes" /></label>
+            <AuthorityPicker v-model="tokenForm.scopes" class="span-2" title="Scopes" />
             <div class="form-actions"><button class="btn btn-primary">Create</button></div>
           </form>
           <DataTable title="Tokens" :rows="tokens" :columns="tokenColumns"><template #actions="{row}"><button class="btn btn-danger" @click="revokeToken(row.id)">Revoke</button></template></DataTable>
@@ -94,7 +94,7 @@
             <label>Username<input v-model="userForm.username" /></label>
             <label>Password<input v-model="userForm.password" type="password" /></label>
             <label>Display<input v-model="userForm.displayName" /></label>
-            <label>Authorities<input v-model="userForm.authorities" /></label>
+            <AuthorityPicker v-model="userForm.authorities" class="span-2" title="Authorities" />
             <div class="form-actions"><button class="btn btn-primary">Create</button></div>
           </form>
           <DataTable title="Users" :rows="users" :columns="userColumns"><template #actions="{row}"><button class="btn btn-danger" @click="disableUser(row.id)">Disable</button></template></DataTable>
@@ -104,7 +104,7 @@
           <form class="panel form-grid" @submit.prevent="saveProvider">
             <h2>{{ providerForm.id?'Edit':'Create' }} Provider</h2>
             <label>Name<input v-model="providerForm.name" /></label>
-            <label>Type<input v-model="providerForm.providerType" /></label>
+            <label>Type<select v-model="providerForm.providerType"><option v-for="type in providerTypes" :key="type.value" :value="type.value">{{ type.label }}</option></select></label>
             <label class="span-2">Base URL<input v-model="providerForm.baseUrl" /></label>
             <label>Model<input v-model="providerForm.model" /></label>
             <label>API Mode<select v-model="providerForm.apiMode"><option>chat_completions</option><option>responses</option><option>auto</option></select></label>
@@ -148,9 +148,9 @@
             <label class="check-field"><input v-model="agentForm2.webAccess" type="checkbox" /> Web access</label>
             <label class="span-2">Description<input v-model="agentForm2.description" /></label>
             <label class="span-2">System<textarea v-model="agentForm2.systemPrompt" rows="5" /></label>
-            <label>Allow<input v-model="agentForm2.toolsAllow" /></label>
-            <label>Deny<input v-model="agentForm2.toolsDeny" /></label>
-            <label class="span-2">Also Allow<input v-model="agentForm2.toolsAlsoAllow" /></label>
+            <ToolPicker v-model="agentForm2.toolsAllow" class="span-2" title="Allow" :tools="toolCatalog" :allow-empty="true" />
+            <ToolPicker v-model="agentForm2.toolsDeny" class="span-2" title="Deny" :tools="toolCatalog" />
+            <ToolPicker v-model="agentForm2.toolsAlsoAllow" class="span-2" title="Also Allow" :tools="toolCatalog" />
             <div class="form-actions"><button class="btn btn-primary">Save</button><button class="btn btn-outline" type="button" @click="resetAgentForm">Reset</button></div>
           </form>
           <DataTable title="Agents" :rows="agents" :columns="agentColumns"><template #actions="{row}"><button class="btn btn-outline" @click="editAgent(row)">Edit</button><button class="btn btn-danger" @click="deleteAgent(row.id)">Delete</button></template></DataTable>
@@ -209,6 +209,20 @@
 import { computed, h, onMounted, reactive, ref } from 'vue';
 const TOKEN_KEY='pyclaw.console.token', BASE_KEY='pyclaw.console.baseUrl';
 const nav=[['dashboard','Overview','01'],['agent','Run','02','agent:run'],['tokens','Tokens','03','token:manage_self'],['users','Users','04','user:manage'],['providers','Providers','05','provider:manage'],['channels','Channels','06','channel:manage'],['agents','Agents','07','agent:read'],['tools','Tools','08','tool:catalog:read'],['routes','Routes','09','agent:route:manage'],['audit','Audit','10','audit:read'],['usage','Usage','11','audit:read']].map(([key,label,icon,authority])=>({key,label,icon,authority}));
+const providerTypes=[
+  {value:'openai-compatible',label:'OpenAI Compatible'},
+  {value:'openai',label:'OpenAI'},
+  {value:'deepseek',label:'DeepSeek'},
+  {value:'azure-openai',label:'Azure OpenAI'},
+  {value:'mock',label:'Mock'}
+];
+const authorityGroups=[
+  {title:'用户与 Token',items:['user:manage','token:manage_self']},
+  {title:'Provider 与 Channel',items:['provider:manage','channel:manage']},
+  {title:'Agent',items:['agent:read','agent:create','agent:update','agent:delete','agent:run','agent:route:manage']},
+  {title:'工具授权',items:['tool:catalog:read','tool:grant:minimal','tool:grant:readonly','tool:grant:messaging','tool:grant:coding','tool:grant:full','tool:grant:shell','tool:grant:web']},
+  {title:'审计',items:['audit:read','approval:resolve']}
+];
 const state=reactive({apiBase:localStorage.getItem(BASE_KEY)||'',token:localStorage.getItem(TOKEN_KEY)||'',me:null,view:'dashboard',loading:false,error:'',notice:''});
 const loginForm=reactive({username:'admin',password:''}), dashboard=reactive({health:'unknown'}), createdToken=reactive({tokenId:'',token:''});
 const agentForm=reactive({prompt:'hello',provider:'openai',sessionId:'web-demo',toolProfile:'minimal',model:''}), agentResult=reactive({text:'',raw:null});
@@ -223,6 +237,8 @@ const tokenColumns=['name','scopes','expiresAt','revokedAt','createdAt'], userCo
 const agentColumns=['agentKey','name','providerConfigName','provider','model','workspaceDir','enabled'], toolColumns=['name','sectionId','profiles','tags','risk'], routeColumns=['priority','agentKey','channel','accountId','peerKind','peerId','mentionAliases','commandPrefixes','dmScope','enabled'], auditColumns=['createdAt','actorType','actorId','action','resourceType','resourceId','success'], usageColumns=['createdAt','sessionId','provider','model','totalTokens','success','latencyMs'];
 const Panel={props:{title:String},setup(p,{slots}){return()=>h('article',{class:'panel'},[h('h2',p.title),slots.default?.()])}};
 const DataTable={props:{title:String,rows:Array,columns:Array},setup(p,{slots}){const cell=v=>v==null||v===''?'-':typeof v==='object'?JSON.stringify(v):String(v);return()=>h('article',{class:'panel table'},[h('h2',`${p.title} (${p.rows.length})`),h('div',{class:'scroll'},[h('table',[h('thead',[h('tr',[...p.columns.map(c=>h('th',c)),slots.actions?h('th','Actions'):null])]),h('tbody',p.rows.length?p.rows.map(r=>h('tr',{key:r.id||JSON.stringify(r)},[...p.columns.map(c=>h('td',cell(r[c]))),slots.actions?h('td',slots.actions({row:r})):null])):[h('tr',[h('td',{colspan:p.columns.length+(slots.actions?1:0)},'No data')])])])])])}};
+const AuthorityPicker={props:{modelValue:{type:String,default:''},title:{type:String,default:'Authorities'}},emits:['update:modelValue'],setup(p,{emit,attrs}){const values=()=>new Set(csv(p.modelValue));const update=set=>emit('update:modelValue',[...set].sort().join(','));const toggle=item=>{const set=values();set.has(item)?set.delete(item):set.add(item);update(set)};const setGroup=(items,checked)=>{const set=values();items.forEach(item=>checked?set.add(item):set.delete(item));update(set)};return()=>{const selected=values();return h('section',{class:['picker',attrs.class]},[h('div',{class:'picker-head'},[h('span',p.title),h('code',selected.size?`${selected.size} selected`:'none')]),h('div',{class:'picker-groups'},authorityGroups.map(group=>{const all=group.items.every(item=>selected.has(item));return h('fieldset',{class:'picker-group',key:group.title},[h('legend',[group.title,h('button',{type:'button',class:'link-btn',onClick:()=>setGroup(group.items,!all)},all?'Clear':'All')]),h('div',{class:'picker-options'},group.items.map(item=>h('label',{class:'choice',key:item},[h('input',{type:'checkbox',checked:selected.has(item),onChange:()=>toggle(item)}),h('span',item)])))])}))])}}};
+const ToolPicker={props:{modelValue:{type:String,default:''},title:{type:String,default:'Tools'},tools:{type:Array,default:()=>[]},allowEmpty:{type:Boolean,default:false}},emits:['update:modelValue'],setup(p,{emit,attrs}){const values=()=>new Set(csv(p.modelValue));const update=set=>emit('update:modelValue',[...set].sort().join(','));const groups=()=>{const out={};for(const tool of p.tools||[]){const key=tool.sectionId||'other';(out[key] ||= []).push(tool)}return out};const toggle=name=>{const set=values();set.has(name)?set.delete(name):set.add(name);update(set)};const setGroup=(tools,checked)=>{const set=values();tools.forEach(tool=>checked?set.add(tool.name):set.delete(tool.name));update(set)};return()=>{const selected=values();const grouped=groups();const sections=Object.keys(grouped);return h('section',{class:['picker',attrs.class]},[h('div',{class:'picker-head'},[h('span',p.title),h('code',selected.size?`${selected.size} selected`:p.allowEmpty?'inherit profile':'none')]),sections.length?h('div',{class:'picker-groups'},sections.map(section=>{const tools=grouped[section];const all=tools.every(tool=>selected.has(tool.name));return h('fieldset',{class:'picker-group',key:section},[h('legend',[section,h('button',{type:'button',class:'link-btn',onClick:()=>setGroup(tools,!all)},all?'Clear':'All')]),h('div',{class:'picker-options'},tools.map(tool=>h('label',{class:['choice','tool-choice',`risk-${tool.risk}`],key:tool.name,title:tool.description},[h('input',{type:'checkbox',checked:selected.has(tool.name),onChange:()=>toggle(tool.name)}),h('span',[h('b',tool.name),h('small',`${tool.risk} · ${(tool.profiles||[]).join('/')}`)])])))])})):h('p',{class:'picker-empty'},'Open Tools page once or refresh Agents after tool catalog is available.')])}}};
 onMounted(()=>{if(state.token)loadMe()});
 function defProvider(){return{id:'',name:'',providerType:'openai-compatible',baseUrl:'https://api.deepseek.com',model:'deepseek-chat',apiMode:'chat_completions',secretRef:'pyclaw-provider-secret',apiKey:'',clearApiKey:false,apiKeyConfigured:false,enabled:true}}
 function defChannel(){return{id:'',channelType:'wechat',name:'',configJson:'{\n  "callbackPath": "/api/webhooks/wechat",\n  "reply_mode": "passive_xml"\n}',replyMode:'passive_xml',secretRef:'',enabled:true}}
@@ -245,11 +261,11 @@ function editProvider(r){Object.assign(providerForm,r,{apiKey:'',clearApiKey:fal
 async function saveProvider(){await load(async()=>{const p={name:providerForm.name,providerType:providerForm.providerType,baseUrl:providerForm.baseUrl||null,model:providerForm.model,apiMode:providerForm.apiMode,secretRef:providerForm.secretRef||null,apiKey:providerForm.apiKey||null,clearApiKey:providerForm.clearApiKey,enabled:providerForm.enabled};await api(providerForm.id?`/api/providers/${providerForm.id}`:'/api/providers',{method:providerForm.id?'PUT':'POST',body:JSON.stringify(p)});resetProviderForm();await loadProviders();await loadProviderOptions()})} async function deleteProvider(id){if(confirm('Delete provider?'))await load(async()=>{await api(`/api/providers/${id}`,{method:'DELETE'});await loadProviders();await loadProviderOptions()})}
 function editChannel(r){const cfg=parse(r.configJson||'{}');Object.assign(channelForm,{...r,replyMode:cfg.reply_mode||'async_worker',configJson:fmt(r.configJson)})} function resetChannelForm(){Object.assign(channelForm,defChannel())}
 async function saveChannel(){await load(async()=>{const cfg=parse(channelForm.configJson);cfg.reply_mode=channelForm.replyMode;await api(channelForm.id?`/api/channels/${channelForm.id}`:'/api/channels',{method:channelForm.id?'PUT':'POST',body:JSON.stringify({channelType:channelForm.channelType,name:channelForm.name,config:cfg,secretRef:channelForm.secretRef||null,enabled:channelForm.enabled})});resetChannelForm();await loadChannels()})} async function deleteChannel(id){if(confirm('Delete channel?'))await load(async()=>{await api(`/api/channels/${id}`,{method:'DELETE'});await loadChannels()})}
-async function loadAgents(){await safe(async()=>{if(!providerOptions.value.length)await loadProviderOptions();const rows=await api('/api/agents');agents.value=rows.map(enrichAgent)})} function enrichAgent(agent){return{...agent,providerConfigName:providerOptionName(agent.providerId)}} function providerOptionName(id){if(!id)return 'Environment';const p=providerOptions.value.find(x=>x.id===id);return p?p.name+' ('+p.model+')':'Unknown provider'} function resetAgentForm(){Object.assign(agentForm2,defAgent())}
+async function loadAgents(){await safe(async()=>{if(!providerOptions.value.length)await loadProviderOptions();if(!toolCatalog.value.length)await loadToolCatalogOnly();const rows=await api('/api/agents');agents.value=rows.map(enrichAgent)})} function enrichAgent(agent){return{...agent,providerConfigName:providerOptionName(agent.providerId)}} function providerOptionName(id){if(!id)return 'Environment';const p=providerOptions.value.find(x=>x.id===id);return p?p.name+' ('+p.model+')':'Unknown provider'} function resetAgentForm(){Object.assign(agentForm2,defAgent())}
 function editAgent(r){const p=r.toolPolicy||{};Object.assign(agentForm2,{...defAgent(),...r,toolProfile:p.profile||'messaging',toolsAllow:(p.toolsAllow||[]).join(','),toolsDeny:(p.toolsDeny||[]).join(','),toolsAlsoAllow:(p.toolsAlsoAllow||[]).join(','),workspaceOnly:p.workspaceOnly??true,readonly:p.readonly??false,shellApproval:p.shellApproval||'deny',webAccess:p.webAccess??false})}
 function agentPayload(){return{agentKey:agentForm2.agentKey,name:agentForm2.name,description:agentForm2.description||null,enabled:agentForm2.enabled,providerId:agentForm2.providerId||null,provider:agentForm2.provider||null,model:agentForm2.model||null,systemPrompt:agentForm2.systemPrompt||null,workspaceDir:agentForm2.workspaceDir||null,runtimeType:agentForm2.runtimeType,toolPolicy:{profile:agentForm2.toolProfile,toolsAllow:empty(agentForm2.toolsAllow),toolsDeny:csv(agentForm2.toolsDeny),toolsAlsoAllow:csv(agentForm2.toolsAlsoAllow),workspaceOnly:agentForm2.workspaceOnly,readonly:agentForm2.readonly,shellApproval:agentForm2.shellApproval,webAccess:agentForm2.webAccess}}}
 async function saveAgent(){await load(async()=>{await api(agentForm2.id?`/api/agents/${agentForm2.id}`:'/api/agents',{method:agentForm2.id?'PUT':'POST',body:JSON.stringify(agentPayload())});resetAgentForm();await loadAgents()})} async function deleteAgent(id){if(confirm('Delete agent?'))await load(async()=>{await api(`/api/agents/${id}`,{method:'DELETE'});await loadAgents()})}
-async function loadTools(){await safe(async()=>{toolProfiles.value=await api('/api/tools/profiles');toolCatalog.value=await api('/api/tools/catalog');await previewTools()})} async function previewTools(){await safe(async()=>{const d=await api('/api/tools/effective',{method:'POST',body:JSON.stringify({profile:toolForm.profile,allow:empty(toolForm.allow),deny:csv(toolForm.deny),alsoAllow:csv(toolForm.alsoAllow),readonly:toolForm.readonly})});toolPreview.effectiveTools=d.effectiveTools||[];toolPreview.deniedTools=d.deniedTools||[]})}
+async function loadToolCatalogOnly(){toolCatalog.value=await api('/api/tools/catalog')} async function loadTools(){await safe(async()=>{toolProfiles.value=await api('/api/tools/profiles');await loadToolCatalogOnly();await previewTools()})} async function previewTools(){await safe(async()=>{const d=await api('/api/tools/effective',{method:'POST',body:JSON.stringify({profile:toolForm.profile,allow:empty(toolForm.allow),deny:csv(toolForm.deny),alsoAllow:csv(toolForm.alsoAllow),readonly:toolForm.readonly})});toolPreview.effectiveTools=d.effectiveTools||[];toolPreview.deniedTools=d.deniedTools||[]})}
 async function loadRoutes(){await safe(async()=>{if(!agents.value.length)await loadAgents();routes.value=await api('/api/route-bindings')})} function resetRouteForm(){Object.assign(routeForm,defRoute())} function editRoute(r){Object.assign(routeForm,{...defRoute(),...r,mentionAliases:(r.mentionAliases||[]).join(','),commandPrefixes:(r.commandPrefixes||[]).join(','),senderIds:(r.senderIds||[]).join(',')})}
 function routePayload(){return{enabled:routeForm.enabled,priority:routeForm.priority,agentId:routeForm.agentId,channel:routeForm.channel||null,accountId:routeForm.accountId||null,peerKind:routeForm.peerKind||null,peerId:routeForm.peerId||null,mentionAliases:csv(routeForm.mentionAliases),commandPrefixes:csv(routeForm.commandPrefixes),senderIds:csv(routeForm.senderIds),dmScope:routeForm.dmScope,comment:routeForm.comment||null}}
 async function saveRoute(){await load(async()=>{await api(routeForm.id?`/api/route-bindings/${routeForm.id}`:'/api/route-bindings',{method:routeForm.id?'PUT':'POST',body:JSON.stringify(routePayload())});resetRouteForm();await loadRoutes()})} async function deleteRoute(id){if(confirm('Delete route?'))await load(async()=>{await api(`/api/route-bindings/${id}`,{method:'DELETE'});await loadRoutes()})}
@@ -328,6 +344,24 @@ input:focus,select:focus,textarea:focus{border-color:#86b7fe;box-shadow:0 0 0 .2
 .check-field input{width:1rem;height:1rem}
 .form-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:2px}
 
+.picker{display:grid;gap:10px}
+.picker-head{display:flex;align-items:center;justify-content:space-between;gap:12px;color:#495057;font-size:.86rem;font-weight:800}
+.picker-head code{border:1px solid #b6d4fe;background:#eef6ff;color:#084298;border-radius:999px;padding:3px 8px;font-size:.76rem}
+.picker-groups{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.picker-group{min-width:0;margin:0;border:1px solid var(--border);border-radius:8px;background:#f8f9fa;padding:12px}
+.picker-group legend{float:none;width:100%;display:flex;align-items:center;justify-content:space-between;margin:0 0 8px;padding:0;color:#212529;font-size:.85rem;font-weight:850}
+.picker-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.choice{min-width:0;display:flex;align-items:center;gap:8px;border:1px solid #e9ecef;background:#fff;border-radius:6px;padding:8px 9px;color:#343a40;font-size:.82rem;font-weight:700}
+.choice input{width:1rem;height:1rem;flex:0 0 auto}
+.choice span{min-width:0;overflow-wrap:anywhere}
+.tool-choice span{display:grid;gap:2px}
+.tool-choice small{color:var(--muted);font-size:.72rem;font-weight:700}
+.risk-high{border-color:#f1aeb5;background:#fff8f8}
+.risk-medium{border-color:#ffe69c;background:#fffdf5}
+.risk-low{border-color:#badbcc;background:#fbfffc}
+.link-btn{border:0;background:transparent;color:var(--bs-blue);font-size:.76rem;font-weight:850;padding:0}
+.picker-empty{margin:0;color:var(--muted);font-size:.86rem}
+
 .btn{border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text);padding:9px 13px;font-weight:750;line-height:1.2;min-height:38px}
 .btn:hover{filter:brightness(.98)}
 .btn-primary{background:var(--bs-blue);border-color:var(--bs-blue);color:#fff}
@@ -372,6 +406,7 @@ summary{cursor:pointer;color:#495057;font-weight:800}
   .topbar{align-items:flex-start;flex-direction:column}
   .user-menu{width:100%;justify-content:space-between}
   .metrics,.form-grid,.compact-form{grid-template-columns:1fr}
+  .picker-groups,.picker-options{grid-template-columns:1fr}
   .panel{padding:16px}
 }
 </style>
