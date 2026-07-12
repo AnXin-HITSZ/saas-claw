@@ -212,8 +212,6 @@ const nav=[['dashboard','Overview','01'],['agent','Run','02','agent:run'],['toke
 const providerTypes=[
   {value:'openai-compatible',label:'OpenAI Compatible'},
   {value:'openai',label:'OpenAI'},
-  {value:'deepseek',label:'DeepSeek'},
-  {value:'azure-openai',label:'Azure OpenAI'},
   {value:'mock',label:'Mock'}
 ];
 const authorityGroups=[
