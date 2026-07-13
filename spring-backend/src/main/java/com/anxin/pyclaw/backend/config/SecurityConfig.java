@@ -45,6 +45,7 @@ public class SecurityConfig {
                                 "/index.html",
                                 "/assets/**",
                                 "/api/auth/login",
+                                "/api/auth/register",
                                 "/api/webhooks/wechat",
                                 "/api/webhooks/feishu",
                                 "/api/internal/channels/**",

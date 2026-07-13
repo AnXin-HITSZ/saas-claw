@@ -19,18 +19,53 @@
     </aside>
 
     <main :class="['main', { centered: !state.me }]">
-      <form v-if="!state.me" class="auth-card" @submit.prevent="login">
-        <div class="brand auth-brand">
-          <b>P</b>
-          <span>pyclaw</span>
-        </div>
-        <h1>Console Sign In</h1>
-        <label>Backend URL<input v-model="state.apiBase" placeholder="Same origin" /></label>
-        <label>Username<input v-model="loginForm.username" autocomplete="username" /></label>
-        <label>Password<input v-model="loginForm.password" type="password" autocomplete="current-password" /></label>
-        <button class="btn btn-primary">Sign in</button>
-        <p v-if="state.error" class="form-error">{{ state.error }}</p>
-      </form>
+      <section v-if="!state.me" class="cover-shell">
+        <header class="cover-header">
+          <div class="brand cover-brand">
+            <b>P</b>
+            <span>pyclaw</span>
+          </div>
+          <nav class="cover-nav" aria-label="Welcome navigation">
+            <button :class="{ active: state.authMode === 'login' }" @click="state.authMode='login'">Sign in</button>
+            <button :class="{ active: state.authMode === 'register' }" @click="state.authMode='register'">Register</button>
+          </nav>
+        </header>
+
+        <section class="cover-hero">
+          <div class="cover-copy">
+            <p class="cover-kicker">Multi-agent workspace</p>
+            <h1>开启你的 Claw 工作空间</h1>
+            <p class="cover-lead">创建 Claw，绑定飞书群，把前端、后端、运维、产品、算法等角色 Agent 放进同一个协作入口。</p>
+            <div class="cover-actions">
+              <button class="btn btn-light" @click="state.authMode='register'">开启我的 Claw</button>
+              <button class="btn btn-cover-outline" @click="state.authMode='login'">已有账号登录</button>
+            </div>
+          </div>
+
+          <form v-if="state.authMode === 'login'" class="auth-card cover-card" @submit.prevent="login">
+            <h2>Sign in</h2>
+            <p>进入控制台，管理你的 Claw、Agent 与飞书绑定。</p>
+            <label>Backend URL<input v-model="state.apiBase" placeholder="Same origin" /></label>
+            <label>Username<input v-model="loginForm.username" autocomplete="username" /></label>
+            <label>Password<input v-model="loginForm.password" type="password" autocomplete="current-password" /></label>
+            <button class="btn btn-primary">Sign in</button>
+            <p class="auth-switch">还没有账号？<button type="button" @click="state.authMode='register'">立即注册</button></p>
+            <p v-if="state.error" class="form-error">{{ state.error }}</p>
+          </form>
+
+          <form v-else class="auth-card cover-card" @submit.prevent="register">
+            <h2>Create account</h2>
+            <p>注册后会获得创建 Claw、运行 Agent 和管理个人 Token 的基础权限。</p>
+            <label>Backend URL<input v-model="state.apiBase" placeholder="Same origin" /></label>
+            <label>Username<input v-model="registerForm.username" autocomplete="username" minlength="3" maxlength="64" /></label>
+            <label>Display name<input v-model="registerForm.displayName" autocomplete="name" /></label>
+            <label>Password<input v-model="registerForm.password" type="password" autocomplete="new-password" minlength="8" /></label>
+            <button class="btn btn-primary">Create account</button>
+            <p class="auth-switch">已有账号？<button type="button" @click="state.authMode='login'">返回登录</button></p>
+            <p v-if="state.error" class="form-error">{{ state.error }}</p>
+          </form>
+        </section>
+      </section>
 
       <template v-else>
         <header class="topbar">
@@ -261,8 +296,8 @@ const authorityGroups=[
   {title:'工具授权',items:['tool:catalog:read','tool:grant:minimal','tool:grant:readonly','tool:grant:messaging','tool:grant:coding','tool:grant:full','tool:grant:shell','tool:grant:web','tool:grant:host']},
   {title:'审计',items:['audit:read','approval:resolve']}
 ];
-const state=reactive({apiBase:localStorage.getItem(BASE_KEY)||'',token:localStorage.getItem(TOKEN_KEY)||'',me:null,view:'dashboard',loading:false,error:'',notice:''});
-const loginForm=reactive({username:'admin',password:''}), dashboard=reactive({health:'unknown'}), createdToken=reactive({tokenId:'',token:''});
+const state=reactive({apiBase:localStorage.getItem(BASE_KEY)||'',token:localStorage.getItem(TOKEN_KEY)||'',me:null,view:'dashboard',authMode:'login',loading:false,error:'',notice:''});
+const loginForm=reactive({username:'admin',password:''}), registerForm=reactive({username:'',password:'',displayName:''}), dashboard=reactive({health:'unknown'}), createdToken=reactive({tokenId:'',token:''});
 const agentForm=reactive({prompt:'hello',provider:'openai',sessionId:'web-demo',toolProfile:'minimal',model:''}), agentResult=reactive({text:'',raw:null});
 const tokenForm=reactive({name:'frontend-token',expiresAt:'',scopes:'agent:run'}), userForm=reactive({username:'',password:'',displayName:'',authorities:'agent:run,agent:read,token:manage_self'});
 const providerForm=reactive(defProvider()), channelForm=reactive(defChannel()), agentForm2=reactive(defAgent()), clawForm=reactive(defClaw()), toolForm=reactive({profile:'coding',allow:'',deny:'',alsoAllow:'',readonly:false}), routeForm=reactive(defRoute());
@@ -287,6 +322,7 @@ function has(a){return Boolean(state.me?.authorities?.includes(a))} function ep(
 async function api(path,opt={}){const headers={...(opt.headers||{})};if(!(opt.body instanceof FormData))headers['Content-Type']=headers['Content-Type']||'application/json';if(state.token)headers.Authorization=`Bearer ${state.token}`;const r=await fetch(ep(path),{...opt,headers});if(!r.ok)throw new Error(await err(r));if(r.status===204)return null;const t=await r.text();return t?JSON.parse(t):null}
 async function err(r){const t=await r.text();try{const d=JSON.parse(t);return d.message||d.detail||t}catch{return t||`${r.status} ${r.statusText}`}}
 async function login(){await load(async()=>{localStorage.setItem(BASE_KEY,state.apiBase.trim());const d=await api('/api/auth/login',{method:'POST',body:JSON.stringify({username:loginForm.username,password:loginForm.password})});state.token=d.accessToken;localStorage.setItem(TOKEN_KEY,state.token);await loadMe()})}
+async function register(){await load(async()=>{localStorage.setItem(BASE_KEY,state.apiBase.trim());const d=await api('/api/auth/register',{method:'POST',body:JSON.stringify({username:registerForm.username,password:registerForm.password,displayName:registerForm.displayName||null})});state.token=d.accessToken;localStorage.setItem(TOKEN_KEY,state.token);Object.assign(registerForm,{username:'',password:'',displayName:''});await loadMe()})}
 async function loadMe(){try{state.me=await api('/api/auth/me');await refresh()}catch(e){state.me=null;state.token='';localStorage.removeItem(TOKEN_KEY);state.error=e.message}}
 function logout(){state.me=null;state.token='';localStorage.removeItem(TOKEN_KEY)} async function setView(v){state.view=v;await refresh()}
 async function refresh(){const m={dashboard:dash,claws:loadClaws,tokens:loadTokens,users:loadUsers,providers:loadProviders,channels:loadChannels,agents:loadAgents,tools:loadTools,routes:loadRoutes,audit:()=>fetchRows('/api/audit-logs',auditLogs),usage:()=>fetchRows('/api/usage-records',usageRecords)};if(m[state.view])await m[state.view]()}
@@ -367,14 +403,14 @@ button,input,select,textarea{font:inherit}
 button{cursor:pointer}
 
 .app-shell{min-height:100vh;display:grid;grid-template-columns:264px minmax(0,1fr)}
-.auth-shell{grid-template-columns:1fr;background:linear-gradient(135deg,#f8f9fa 0%,#edf5ff 50%,#f6f8fb 100%)}
+.auth-shell{grid-template-columns:1fr;background:#212529;color:#fff}
 .main{min-width:0;padding:24px}
-.centered{display:grid;place-items:center}
+.centered{display:block;padding:0}
 
 .sidebar{position:sticky;top:0;height:100vh;background:var(--sidebar);color:#e9ecef;padding:18px 14px;display:flex;flex-direction:column;border-right:1px solid rgba(255,255,255,.08)}
 .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:1.12rem;letter-spacing:.2px}
 .brand b{width:38px;height:38px;display:grid;place-items:center;border-radius:8px;background:linear-gradient(135deg,var(--bs-blue),var(--bs-cyan));color:#fff;box-shadow:0 8px 20px rgba(13,110,253,.28)}
-.auth-brand{margin-bottom:20px;color:var(--text)}
+.cover-brand{color:#fff}
 .nav-list{margin-top:22px;display:grid;gap:4px}
 .nav-link{width:100%;height:42px;display:flex;align-items:center;gap:10px;border:0;border-radius:6px;background:transparent;color:#cbd5e1;text-align:left;padding:0 12px}
 .nav-link:hover{background:rgba(255,255,255,.08);color:#fff}
@@ -388,8 +424,25 @@ button{cursor:pointer}
 .user-menu{display:flex;align-items:center;gap:10px;min-width:max-content}
 .status-dot{width:9px;height:9px;border-radius:50%;background:var(--bs-green);box-shadow:0 0 0 4px rgba(25,135,84,.14)}
 
-.auth-card{width:min(440px,calc(100vw - 32px));display:grid;gap:16px;background:rgba(255,255,255,.92);border:1px solid var(--border);border-radius:8px;padding:28px;box-shadow:0 24px 60px rgba(15,23,42,.14)}
-.auth-card h1{margin:0;font-size:1.7rem}
+.cover-shell{min-height:100vh;width:100%;display:flex;flex-direction:column;background:#212529;color:#fff;box-shadow:inset 0 0 0 100vmax rgba(0,0,0,.18);overflow:hidden}
+.cover-header{width:min(1120px,calc(100% - 40px));margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:20px;padding:28px 0}
+.cover-nav{display:flex;align-items:center;gap:8px}
+.cover-nav button{border:0;border-bottom:3px solid transparent;background:transparent;color:rgba(255,255,255,.72);padding:8px 4px;font-weight:800}
+.cover-nav button:hover,.cover-nav button.active{color:#fff;border-bottom-color:#fff}
+.cover-hero{width:min(1120px,calc(100% - 40px));margin:auto;display:grid;grid-template-columns:minmax(0,1fr) minmax(360px,420px);align-items:center;gap:48px;padding:32px 0 72px}
+.cover-copy{display:grid;gap:22px;max-width:680px;text-shadow:0 1px 3px rgba(0,0,0,.45)}
+.cover-kicker{margin:0;color:#9ec5fe;text-transform:uppercase;font-size:.82rem;font-weight:900;letter-spacing:.08em}
+.cover-copy h1{margin:0;font-size:3.2rem;line-height:1.05;letter-spacing:0}
+.cover-lead{margin:0;color:rgba(255,255,255,.78);font-size:1.18rem;line-height:1.72;max-width:620px}
+.cover-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.btn-light{background:#fff;border-color:#fff;color:#212529}
+.btn-cover-outline{background:transparent;border-color:rgba(255,255,255,.45);color:#fff}
+.btn-cover-outline:hover{border-color:#fff;background:rgba(255,255,255,.08)}
+.auth-card{width:100%;display:grid;gap:15px;background:rgba(255,255,255,.96);border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:28px;box-shadow:0 24px 70px rgba(0,0,0,.32);color:var(--text)}
+.auth-card h2{margin:0;font-size:1.55rem}
+.auth-card p{margin:0;color:var(--muted);line-height:1.5}
+.auth-switch{font-size:.9rem;text-align:center}
+.auth-switch button{border:0;background:transparent;color:var(--bs-blue);font-weight:850;padding:0}
 .form-error{margin:0;color:#b02a37;font-weight:700}
 
 .stack,.content-grid{max-width:1480px;margin:0 auto}
@@ -476,12 +529,20 @@ summary{cursor:pointer;color:#495057;font-weight:800}
 
 @media(max-width:1100px){
   .app-shell{grid-template-columns:220px minmax(0,1fr)}
+  .cover-hero{grid-template-columns:1fr;gap:28px}
+  .cover-copy{max-width:none}
+  .cover-card{max-width:520px}
   .metrics,.action-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .content-grid{grid-template-columns:1fr}
   .compact-form{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @media(max-width:760px){
   .app-shell{grid-template-columns:1fr}
+  .cover-header{width:calc(100% - 28px);padding:18px 0;align-items:flex-start;flex-direction:column}
+  .cover-hero{width:calc(100% - 28px);padding:18px 0 36px}
+  .cover-copy h1{font-size:2.25rem}
+  .cover-lead{font-size:1rem}
+  .auth-card{padding:20px}
   .main{padding:14px}
   .sidebar{position:relative;height:auto}
   .nav-list{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:14px}

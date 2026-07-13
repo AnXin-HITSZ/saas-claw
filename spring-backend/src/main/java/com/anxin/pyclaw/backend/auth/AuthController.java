@@ -23,6 +23,11 @@ public class AuthController {
         return authService.login(request);
     }
 
+    @PostMapping("/register")
+    public LoginResponse register(@Valid @RequestBody RegisterRequest request) {
+        return authService.register(request);
+    }
+
     @GetMapping("/me")
     public MeResponse me(Authentication authentication) {
         AuthenticatedPrincipal principal = (AuthenticatedPrincipal) authentication.getPrincipal();
