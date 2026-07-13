@@ -1,0 +1,18 @@
+# Example K3s values for pyclaw-api MySQL ingress queue and channel worker.
+# Copy to pyclaw-api-ingressqueue-mysql-values-k3s.yaml on the server.
+# Keep the real OPENCLAW_INGRESS_QUEUE_DSN in pyclaw-ingress-queue-secret.
+
+ingressQueue:
+  enabled: true
+  staleAfterSeconds: 300
+  mysql:
+    dsnSecretName: pyclaw-ingress-queue-secret
+    dsnSecretKey: OPENCLAW_INGRESS_QUEUE_DSN
+
+worker:
+  enabled: true
+  replicaCount: 1
+  channels: wechat,feishu
+  pollIntervalSeconds: 0.5
+  ownerId: pyclaw-channel-worker
+  logLevel: INFO

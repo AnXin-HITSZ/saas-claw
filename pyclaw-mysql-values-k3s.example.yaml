@@ -1,0 +1,49 @@
+# Example K3s values for pyclaw MySQL.
+# Copy to pyclaw-mysql-values-k3s.yaml on the server and replace placeholders there.
+# Do not put real root/user passwords in this file; keep them in pyclaw-mysql-secret.
+
+image:
+  repository: mysql
+  # mysql:8.0.27 is used because it is confirmed pullable in the current K3s/ECS environment.
+  tag: "8.0.27"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 3306
+
+mysql:
+  database: pyclaw_runtime
+  databases:
+    runtime: pyclaw_runtime
+    control: pyclaw_control
+  user: pyclaw
+  auth:
+    createSecret: false
+    existingSecret: pyclaw-mysql-secret
+    rootPasswordKey: MYSQL_ROOT_PASSWORD
+    databaseKey: MYSQL_DATABASE
+    userKey: MYSQL_USER
+    passwordKey: MYSQL_PASSWORD
+
+bootstrap:
+  enabled: true
+  backoffLimit: 6
+  annotations: {}
+
+config:
+  characterSetServer: utf8mb4
+  collationServer: utf8mb4_unicode_ci
+
+persistence:
+  enabled: true
+  storageClassName: ""
+  size: 10Gi
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
