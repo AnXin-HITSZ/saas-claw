@@ -210,3 +210,25 @@ pyclaw-web/src/App.vue
 ```
 
 配置运维 Agent 时，推荐在 `Also Allow` 中勾选 `group:host`；若希望更细粒度，也可以只勾选 `host_uname`、`host_df`、`host_free` 中的一部分。
+
+## Channel Worker Host SSH Secret 挂载补充
+
+排查 ECS 时发现 `deployment/pyclaw` 已经具备 `HOST_SSH_*` 环境变量，但 `deployment/pyclaw-channel-worker` 没有这些变量。由于飞书、微信异步消息由 Channel Worker 消费，聊天触发的 Host SSH 工具会在 Worker 内执行；如果 Worker 没有挂载 `pyclaw-host-ssh-secret`，即使 API Pod 可以通过 SSH 自检，Agent 消息链路仍然无法调用 host 工具。
+
+本次修改 `helm/pyclaw/templates/worker-deployment.yaml`，让 Worker 在 `hostSsh.enabled=true` 时与 API Pod 保持一致：
+
+```text
+- 从 pyclaw-host-ssh-secret 读取 HOST_SSH_HOST / HOST_SSH_PORT / HOST_SSH_USERNAME
+- 设置 HOST_SSH_KEY_PATH=/var/run/secrets/pyclaw-host-ssh/id_ed25519
+- 设置 HOST_SSH_KNOWN_HOSTS_PATH=/var/run/secrets/pyclaw-host-ssh/known_hosts
+- 以 readOnly=true 挂载 host-ssh-secret，defaultMode=0400
+```
+
+部署后验证命令：
+
+```bash
+sudo /usr/local/bin/k3s kubectl -n pyclaw rollout status deployment/pyclaw-channel-worker
+sudo /usr/local/bin/k3s kubectl -n pyclaw exec deployment/pyclaw-channel-worker -- printenv | grep HOST_SSH
+```
+
+如果 Worker 输出 `HOST_SSH_HOST`、`HOST_SSH_PORT`、`HOST_SSH_USERNAME`、`HOST_SSH_KEY_PATH`、`HOST_SSH_KNOWN_HOSTS_PATH`，说明异步 Channel 链路已经具备 Host SSH 工具运行所需的部署配置。

@@ -69,6 +69,27 @@ spec:
                   name: {{ .Values.ingressQueue.mysql.dsnSecretName }}
                   key: {{ .Values.ingressQueue.mysql.dsnSecretKey }}
             {{- end }}
+            {{- if .Values.hostSsh.enabled }}
+            - name: HOST_SSH_KEY_PATH
+              value: {{ printf "%s/id_ed25519" .Values.hostSsh.mountPath | quote }}
+            - name: HOST_SSH_KNOWN_HOSTS_PATH
+              value: {{ printf "%s/known_hosts" .Values.hostSsh.mountPath | quote }}
+            - name: HOST_SSH_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.hostSsh.existingSecret }}
+                  key: host
+            - name: HOST_SSH_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.hostSsh.existingSecret }}
+                  key: port
+            - name: HOST_SSH_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.hostSsh.existingSecret }}
+                  key: username
+            {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -80,6 +101,11 @@ spec:
           volumeMounts:
             - name: chatdata
               mountPath: {{ .Values.persistence.mountPath }}
+            {{- if .Values.hostSsh.enabled }}
+            - name: host-ssh-secret
+              mountPath: {{ .Values.hostSsh.mountPath }}
+              readOnly: true
+            {{- end }}
       volumes:
         - name: chatdata
           {{- if .Values.persistence.enabled }}
@@ -88,6 +114,12 @@ spec:
           {{- else }}
           emptyDir: {}
           {{- end }}
+        {{- if .Values.hostSsh.enabled }}
+        - name: host-ssh-secret
+          secret:
+            secretName: {{ .Values.hostSsh.existingSecret }}
+            defaultMode: 0400
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
