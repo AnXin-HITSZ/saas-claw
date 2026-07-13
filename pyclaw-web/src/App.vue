@@ -36,10 +36,6 @@
             <p class="cover-kicker">Multi-agent workspace</p>
             <h1>开启你的 Claw 工作空间</h1>
             <p class="cover-lead">创建 Claw，绑定飞书群，把前端、后端、运维、产品、算法等角色 Agent 放进同一个协作入口。</p>
-            <div class="cover-actions">
-              <button class="btn btn-light" @click="state.authMode='register'">开启我的 Claw</button>
-              <button class="btn btn-cover-outline" @click="state.authMode='login'">已有账号登录</button>
-            </div>
           </div>
 
           <form v-if="state.authMode === 'login'" class="auth-card cover-card" @submit.prevent="login">
@@ -434,10 +430,6 @@ button{cursor:pointer}
 .cover-kicker{margin:0;color:#9ec5fe;text-transform:uppercase;font-size:.82rem;font-weight:900;letter-spacing:.08em}
 .cover-copy h1{margin:0;font-size:3.2rem;line-height:1.05;letter-spacing:0}
 .cover-lead{margin:0;color:rgba(255,255,255,.78);font-size:1.18rem;line-height:1.72;max-width:620px}
-.cover-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.btn-light{background:#fff;border-color:#fff;color:#212529}
-.btn-cover-outline{background:transparent;border-color:rgba(255,255,255,.45);color:#fff}
-.btn-cover-outline:hover{border-color:#fff;background:rgba(255,255,255,.08)}
 .auth-card{width:100%;display:grid;gap:15px;background:rgba(255,255,255,.96);border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:28px;box-shadow:0 24px 70px rgba(0,0,0,.32);color:var(--text)}
 .auth-card h2{margin:0;font-size:1.55rem}
 .auth-card p{margin:0;color:var(--muted);line-height:1.5}
