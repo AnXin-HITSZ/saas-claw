@@ -358,9 +358,12 @@ class PlatformAdapterTests(unittest.IsolatedAsyncioTestCase):
         text = await adapter.text(ChannelMessageSendTextContext("feishu", "tenant", "oc_1", "hi"))
         card = await adapter.card(ChannelMessageSendTextContext("feishu", "tenant", "oc_1", "card"), {"config": {}})
 
+        sent_card = json.loads(client.posts[0][1]["content"])
         self.assertEqual(text.message_id, "om_1")
+        self.assertEqual(text.receipt.parts[0].payload_kind, "card")
         self.assertEqual(card.receipt.parts[0].payload_kind, "card")
-        self.assertEqual(json.loads(client.posts[0][1]["content"]), {"text": "hi"})
+        self.assertEqual(client.posts[0][1]["msg_type"], "interactive")
+        self.assertEqual(sent_card["elements"][0]["text"], {"tag": "lark_md", "content": "hi"})
 
 
 class WorkerDispatcherTests(unittest.IsolatedAsyncioTestCase):

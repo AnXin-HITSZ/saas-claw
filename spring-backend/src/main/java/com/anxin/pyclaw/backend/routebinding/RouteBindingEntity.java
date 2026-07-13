@@ -16,6 +16,7 @@ public class RouteBindingEntity {
     private boolean enabled;
     @Column(nullable = false)
     private int priority;
+    private String clawId;
     @Column(nullable = false)
     private String agentId;
     private String channel;
@@ -49,6 +50,8 @@ public class RouteBindingEntity {
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
     public int getPriority() { return priority; }
     public void setPriority(int priority) { this.priority = priority; }
+    public String getClawId() { return clawId; }
+    public void setClawId(String clawId) { this.clawId = clawId; }
     public String getAgentId() { return agentId; }
     public void setAgentId(String agentId) { this.agentId = agentId; }
     public String getChannel() { return channel; }

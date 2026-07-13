@@ -53,12 +53,50 @@
           <div class="metrics">
             <article><span>Backend</span><b>{{ dashboard.health }}</b></article>
             <article><span>User</span><b>{{ state.me.username }}</b></article>
+            <article><span>Claws</span><b>{{ claws.length }}</b></article>
             <article><span>Runs</span><b>{{ usageStats.totalRuns }}</b></article>
-            <article><span>Tokens</span><b>{{ usageStats.totalTokens }}</b></article>
+          </div>
+          <div class="action-grid">
+            <button v-if="has('claw:read')" class="action-card" @click="setView('claws')"><b>开启我的 Claw</b><span>创建 Claw，绑定飞书群，并选择多个角色 Agent。</span></button>
+            <button v-if="has('agent:run')" class="action-card" @click="setView('agent')"><b>进入 Web 对话</b><span>直接在网页中发起一次 Agent 会话。</span></button>
+            <button v-if="has('channel:manage')" class="action-card" @click="setView('channels')"><b>部署到飞书</b><span>检查飞书 Channel 配置和回调模式。</span></button>
+            <button v-if="has('provider:manage')" class="action-card" @click="setView('providers')"><b>Provider 配置</b><span>维护 DeepSeek 或其他模型服务配置。</span></button>
           </div>
           <Panel title="Authorities">
             <div class="chips"><span v-for="a in state.me.authorities" :key="a">{{ a }}</span></div>
           </Panel>
+        </section>
+
+        <section v-if="state.view==='claws'" class="stack">
+          <form class="panel form-grid" @submit.prevent="saveClaw">
+            <h2>{{ clawForm.id?'Edit':'Create' }} Claw</h2>
+            <label>Name<input v-model="clawForm.name" /></label>
+            <label>Status<select v-model="clawForm.status"><option>active</option><option>paused</option></select></label>
+            <label class="span-2">Default Agent<select v-model="clawForm.defaultAgentId"><option value="">None</option><option v-for="a in agents" :key="a.id" :value="a.id">{{ a.agentKey }} - {{ a.name }}</option></select></label>
+            <label class="span-2">Description<input v-model="clawForm.description" /></label>
+            <label class="check-field"><input v-model="clawForm.feishuEnabled" type="checkbox" /> Feishu enabled</label>
+            <label>Feishu Account<input v-model="clawForm.feishuAccountId" placeholder="optional app/account id" /></label>
+            <label>Feishu Peer Kind<select v-model="clawForm.feishuPeerKind"><option>group</option><option>direct</option><option>channel</option><option>thread</option></select></label>
+            <label>Feishu Peer ID<input v-model="clawForm.feishuPeerId" placeholder="chat_id / open_chat_id" /></label>
+            <label class="span-2">Feishu Comment<input v-model="clawForm.feishuComment" /></label>
+            <div class="span-2 role-editor">
+              <div class="role-editor-head"><h3>Role Agents</h3><button class="btn btn-outline" type="button" @click="addClawRole">Add role</button></div>
+              <div v-if="!clawForm.roles.length" class="empty-state">No role agent yet</div>
+              <article v-for="(role,index) in clawForm.roles" :key="role.localId" class="role-card">
+                <label>Role Key<input v-model="role.roleKey" placeholder="frontend" /></label>
+                <label>Display<input v-model="role.displayName" placeholder="前端" /></label>
+                <label class="span-2">Agent<select v-model="role.agentId"><option value="">Select</option><option v-for="a in agents" :key="a.id" :value="a.id">{{ a.agentKey }} - {{ a.name }}</option></select></label>
+                <label>Mention Aliases<input v-model="role.mentionAliases" placeholder="前端,frontend" /></label>
+                <label>Command Prefixes<input v-model="role.commandPrefixes" placeholder="/frontend,/fe" /></label>
+                <label>Sort Order<input v-model.number="role.sortOrder" type="number" /></label>
+                <label class="check-field"><input v-model="role.defaultRole" type="checkbox" /> Default</label>
+                <label class="check-field"><input v-model="role.enabled" type="checkbox" /> Enabled</label>
+                <div class="role-actions"><button class="btn btn-danger" type="button" @click="removeClawRole(index)">Remove</button></div>
+              </article>
+            </div>
+            <div class="form-actions"><button class="btn btn-primary">Save Claw</button><button class="btn btn-outline" type="button" @click="resetClawForm">Reset</button></div>
+          </form>
+          <DataTable title="Claws" :rows="claws" :columns="clawColumns"><template #actions="{row}"><button class="btn btn-outline" @click="editClaw(row)">Edit</button><button class="btn btn-outline" @click="syncClawRoutes(row.id)">Sync routes</button><button class="btn btn-danger" @click="deleteClaw(row.id)">Delete</button></template></DataTable>
         </section>
 
         <section v-if="state.view==='agent'" class="content-grid">
@@ -175,6 +213,7 @@
             <h2>{{ routeForm.id?'Edit':'Create' }} Route</h2>
             <label class="span-2">Agent<select v-model="routeForm.agentId"><option value="">Select</option><option v-for="a in agents" :key="a.id" :value="a.id">{{ a.agentKey }} - {{ a.name }}</option></select></label>
             <label>Priority<input v-model.number="routeForm.priority" type="number" /></label>
+            <label>Claw ID<input v-model="routeForm.clawId" /></label>
             <label>Channel<input v-model="routeForm.channel" /></label>
             <label>Account<input v-model="routeForm.accountId" /></label>
             <label>Peer Kind<select v-model="routeForm.peerKind"><option value="">Any</option><option>direct</option><option>group</option><option>channel</option><option>thread</option></select></label>
@@ -208,7 +247,7 @@
 <script setup>
 import { computed, h, onMounted, reactive, ref } from 'vue';
 const TOKEN_KEY='pyclaw.console.token', BASE_KEY='pyclaw.console.baseUrl';
-const nav=[['dashboard','Overview','01'],['agent','Run','02','agent:run'],['tokens','Tokens','03','token:manage_self'],['users','Users','04','user:manage'],['providers','Providers','05','provider:manage'],['channels','Channels','06','channel:manage'],['agents','Agents','07','agent:read'],['tools','Tools','08','tool:catalog:read'],['routes','Routes','09','agent:route:manage'],['audit','Audit','10','audit:read'],['usage','Usage','11','audit:read']].map(([key,label,icon,authority])=>({key,label,icon,authority}));
+const nav=[['dashboard','Home','01'],['claws','Claws','02','claw:read'],['agent','Run','03','agent:run'],['tokens','Tokens','04','token:manage_self'],['users','Users','05','user:manage'],['providers','Providers','06','provider:manage'],['channels','Channels','07','channel:manage'],['agents','Agents','08','agent:read'],['tools','Tools','09','tool:catalog:read'],['routes','Routes','10','agent:route:manage'],['audit','Audit','11','audit:read'],['usage','Usage','12','audit:read']].map(([key,label,icon,authority])=>({key,label,icon,authority}));
 const providerTypes=[
   {value:'openai-compatible',label:'OpenAI Compatible'},
   {value:'openai',label:'OpenAI'},
@@ -217,6 +256,7 @@ const providerTypes=[
 const authorityGroups=[
   {title:'用户与 Token',items:['user:manage','token:manage_self']},
   {title:'Provider 与 Channel',items:['provider:manage','channel:manage']},
+  {title:'Claw',items:['claw:read','claw:create','claw:update','claw:delete']},
   {title:'Agent',items:['agent:read','agent:create','agent:update','agent:delete','agent:run','agent:route:manage']},
   {title:'工具授权',items:['tool:catalog:read','tool:grant:minimal','tool:grant:readonly','tool:grant:messaging','tool:grant:coding','tool:grant:full','tool:grant:shell','tool:grant:web','tool:grant:host']},
   {title:'审计',items:['audit:read','approval:resolve']}
@@ -225,14 +265,14 @@ const state=reactive({apiBase:localStorage.getItem(BASE_KEY)||'',token:localStor
 const loginForm=reactive({username:'admin',password:''}), dashboard=reactive({health:'unknown'}), createdToken=reactive({tokenId:'',token:''});
 const agentForm=reactive({prompt:'hello',provider:'openai',sessionId:'web-demo',toolProfile:'minimal',model:''}), agentResult=reactive({text:'',raw:null});
 const tokenForm=reactive({name:'frontend-token',expiresAt:'',scopes:'agent:run'}), userForm=reactive({username:'',password:'',displayName:'',authorities:'agent:run,agent:read,token:manage_self'});
-const providerForm=reactive(defProvider()), channelForm=reactive(defChannel()), agentForm2=reactive(defAgent()), toolForm=reactive({profile:'coding',allow:'',deny:'',alsoAllow:'',readonly:false}), routeForm=reactive(defRoute());
-const tokens=ref([]),users=ref([]),providers=ref([]),providerOptions=ref([]),channels=ref([]),agents=ref([]),toolCatalog=ref([]),routes=ref([]),auditLogs=ref([]),usageRecords=ref([]),toolProfiles=ref(['minimal','readonly','messaging','coding','full']);
+const providerForm=reactive(defProvider()), channelForm=reactive(defChannel()), agentForm2=reactive(defAgent()), clawForm=reactive(defClaw()), toolForm=reactive({profile:'coding',allow:'',deny:'',alsoAllow:'',readonly:false}), routeForm=reactive(defRoute());
+const tokens=ref([]),users=ref([]),providers=ref([]),providerOptions=ref([]),channels=ref([]),agents=ref([]),claws=ref([]),toolCatalog=ref([]),routes=ref([]),auditLogs=ref([]),usageRecords=ref([]),toolProfiles=ref(['minimal','readonly','messaging','coding','full']);
 const toolPreview=reactive({effectiveTools:[],deniedTools:[]});
-const visibleNav=computed(()=>nav.filter(i=>!i.authority||has(i.authority))), currentTitle=computed(()=>nav.find(i=>i.key===state.view)?.label||'Console'), currentSubtitle=computed(()=>({dashboard:'System status',agent:'Run agent',tokens:'API tokens',users:'Users',providers:'Providers',channels:'Channels',agents:'Agent registry',tools:'Tool policy preview',routes:'Route bindings',audit:'Audit logs',usage:'Usage records'}[state.view]||''));
+const visibleNav=computed(()=>nav.filter(i=>!i.authority||has(i.authority))), currentTitle=computed(()=>nav.find(i=>i.key===state.view)?.label||'Console'), currentSubtitle=computed(()=>({dashboard:'Workspace',claws:'My Claws',agent:'Run agent',tokens:'API tokens',users:'Users',providers:'Providers',channels:'Channels',agents:'Agent registry',tools:'Tool policy preview',routes:'Route bindings',audit:'Audit logs',usage:'Usage records'}[state.view]||''));
 const channelReplyModes=computed(()=>channelForm.channelType==='wechat'?[{value:'passive_xml',label:'Passive XML'},{value:'async_worker',label:'Async Worker'}]:[{value:'async_worker',label:'Async Worker'}]);
 const usageStats=computed(()=>({totalRuns:usageRecords.value.length,totalTokens:usageRecords.value.reduce((s,r)=>s+Number(r.totalTokens||0),0)}));
 const tokenColumns=['name','scopes','expiresAt','revokedAt','createdAt'], userColumns=['username','displayName','status','authorities'], providerColumns=['name','providerType','baseUrl','model','apiMode','apiKeyConfigured','enabled'], channelColumns=['channelType','name','secretRef','enabled','updatedAt'];
-const agentColumns=['agentKey','name','providerConfigName','provider','model','workspaceDir','enabled'], toolColumns=['name','sectionId','profiles','tags','risk'], routeColumns=['priority','agentKey','channel','accountId','peerKind','peerId','mentionAliases','commandPrefixes','dmScope','enabled'], auditColumns=['createdAt','actorType','actorId','action','resourceType','resourceId','success'], usageColumns=['createdAt','sessionId','provider','model','totalTokens','success','latencyMs'];
+const agentColumns=['agentKey','name','providerConfigName','provider','model','workspaceDir','enabled'], clawColumns=['name','status','roleCount','feishuBinding','defaultAgentName','updatedAt'], toolColumns=['name','sectionId','profiles','tags','risk'], routeColumns=['priority','clawId','agentKey','channel','accountId','peerKind','peerId','mentionAliases','commandPrefixes','dmScope','enabled'], auditColumns=['createdAt','actorType','actorId','action','resourceType','resourceId','success'], usageColumns=['createdAt','sessionId','provider','model','totalTokens','success','latencyMs'];
 const Panel={props:{title:String},setup(p,{slots}){return()=>h('article',{class:'panel'},[h('h2',p.title),slots.default?.()])}};
 const DataTable={props:{title:String,rows:Array,columns:Array},setup(p,{slots}){const cell=v=>v==null||v===''?'-':typeof v==='object'?JSON.stringify(v):String(v);return()=>h('article',{class:'panel table'},[h('h2',`${p.title} (${p.rows.length})`),h('div',{class:'scroll'},[h('table',[h('thead',[h('tr',[...p.columns.map(c=>h('th',c)),slots.actions?h('th','Actions'):null])]),h('tbody',p.rows.length?p.rows.map(r=>h('tr',{key:r.id||JSON.stringify(r)},[...p.columns.map(c=>h('td',cell(r[c]))),slots.actions?h('td',slots.actions({row:r})):null])):[h('tr',[h('td',{colspan:p.columns.length+(slots.actions?1:0)},'No data')])])])])])}};
 const AuthorityPicker={props:{modelValue:{type:String,default:''},title:{type:String,default:'Authorities'}},emits:['update:modelValue'],setup(p,{emit,attrs}){const values=()=>new Set(csv(p.modelValue));const update=set=>emit('update:modelValue',[...set].sort().join(','));const toggle=item=>{const set=values();set.has(item)?set.delete(item):set.add(item);update(set)};const setGroup=(items,checked)=>{const set=values();items.forEach(item=>checked?set.add(item):set.delete(item));update(set)};return()=>{const selected=values();return h('section',{class:['picker',attrs.class]},[h('div',{class:'picker-head'},[h('span',p.title),h('code',selected.size?`${selected.size} selected`:'none')]),h('div',{class:'picker-groups'},authorityGroups.map(group=>{const all=group.items.every(item=>selected.has(item));return h('fieldset',{class:'picker-group',key:group.title},[h('legend',[group.title,h('button',{type:'button',class:'link-btn',onClick:()=>setGroup(group.items,!all)},all?'Clear':'All')]),h('div',{class:'picker-options'},group.items.map(item=>h('label',{class:'choice',key:item},[h('input',{type:'checkbox',checked:selected.has(item),onChange:()=>toggle(item)}),h('span',item)])))])}))])}}};
@@ -240,17 +280,30 @@ const ToolPicker={props:{modelValue:{type:String,default:''},title:{type:String,
 function defProvider(){return{id:'',name:'',providerType:'openai-compatible',baseUrl:'https://api.deepseek.com',model:'deepseek-chat',apiMode:'chat_completions',secretRef:'pyclaw-provider-secret',apiKey:'',clearApiKey:false,apiKeyConfigured:false,enabled:true}}
 function defChannel(){return{id:'',channelType:'wechat',name:'',configJson:'{\n  "callbackPath": "/api/webhooks/wechat",\n  "reply_mode": "passive_xml"\n}',replyMode:'passive_xml',secretRef:'',enabled:true}}
 function defAgent(){return{id:'',agentKey:'default',name:'Default Agent',description:'',enabled:true,providerId:'',provider:'openai',model:'',systemPrompt:'',workspaceDir:'',runtimeType:'agent_session',toolProfile:'messaging',toolsAllow:'',toolsDeny:'',toolsAlsoAllow:'',workspaceOnly:true,readonly:false,shellApproval:'deny',webAccess:false}}
-function defRoute(){return{id:'',enabled:true,priority:0,agentId:'',channel:'feishu',accountId:'',peerKind:'',peerId:'',mentionAliases:'',commandPrefixes:'',senderIds:'',dmScope:'per-account-channel-peer',comment:''}}
+function defClaw(){return{id:'',name:'My Claw',description:'',status:'active',defaultAgentId:'',feishuEnabled:true,feishuAccountId:'',feishuPeerKind:'group',feishuPeerId:'',feishuComment:'',roles:[defClawRole(0)]}}
+function defClawRole(index=0){return{localId:String(Date.now())+'-'+String(Math.random()),roleKey:index?'role-'+(index+1):'default',displayName:index?'Role '+(index+1):'默认',agentId:'',mentionAliases:'',commandPrefixes:'',defaultRole:index===0,enabled:true,sortOrder:index*10}}
+function defRoute(){return{id:'',enabled:true,priority:0,clawId:'',agentId:'',channel:'feishu',accountId:'',peerKind:'',peerId:'',mentionAliases:'',commandPrefixes:'',senderIds:'',dmScope:'per-account-channel-peer',comment:''}}
 function has(a){return Boolean(state.me?.authorities?.includes(a))} function ep(p){return`${state.apiBase.trim().replace(/\/$/,'')}${p}`}
 async function api(path,opt={}){const headers={...(opt.headers||{})};if(!(opt.body instanceof FormData))headers['Content-Type']=headers['Content-Type']||'application/json';if(state.token)headers.Authorization=`Bearer ${state.token}`;const r=await fetch(ep(path),{...opt,headers});if(!r.ok)throw new Error(await err(r));if(r.status===204)return null;const t=await r.text();return t?JSON.parse(t):null}
 async function err(r){const t=await r.text();try{const d=JSON.parse(t);return d.message||d.detail||t}catch{return t||`${r.status} ${r.statusText}`}}
 async function login(){await load(async()=>{localStorage.setItem(BASE_KEY,state.apiBase.trim());const d=await api('/api/auth/login',{method:'POST',body:JSON.stringify({username:loginForm.username,password:loginForm.password})});state.token=d.accessToken;localStorage.setItem(TOKEN_KEY,state.token);await loadMe()})}
 async function loadMe(){try{state.me=await api('/api/auth/me');await refresh()}catch(e){state.me=null;state.token='';localStorage.removeItem(TOKEN_KEY);state.error=e.message}}
 function logout(){state.me=null;state.token='';localStorage.removeItem(TOKEN_KEY)} async function setView(v){state.view=v;await refresh()}
-async function refresh(){const m={dashboard:dash,tokens:loadTokens,users:loadUsers,providers:loadProviders,channels:loadChannels,agents:loadAgents,tools:loadTools,routes:loadRoutes,audit:()=>fetchRows('/api/audit-logs',auditLogs),usage:()=>fetchRows('/api/usage-records',usageRecords)};if(m[state.view])await m[state.view]()}
-async function dash(){await safe(async()=>{try{dashboard.health=(await api(state.apiBase.trim()?'/healthz':'/backend-healthz'))?.status||'ok'}catch{dashboard.health='unavailable'}if(has('audit:read'))await fetchRows('/api/usage-records',usageRecords)})}
+async function refresh(){const m={dashboard:dash,claws:loadClaws,tokens:loadTokens,users:loadUsers,providers:loadProviders,channels:loadChannels,agents:loadAgents,tools:loadTools,routes:loadRoutes,audit:()=>fetchRows('/api/audit-logs',auditLogs),usage:()=>fetchRows('/api/usage-records',usageRecords)};if(m[state.view])await m[state.view]()}
+async function dash(){await safe(async()=>{try{dashboard.health=(await api(state.apiBase.trim()?'/healthz':'/backend-healthz'))?.status||'ok'}catch{dashboard.health='unavailable'}if(has('claw:read'))await loadClaws();if(has('audit:read'))await fetchRows('/api/usage-records',usageRecords)})}
 async function runAgent(){await load(async()=>{const d=await api('/api/agent/run',{method:'POST',body:JSON.stringify({prompt:agentForm.prompt,provider:agentForm.provider,sessionId:agentForm.sessionId,toolProfile:agentForm.toolProfile,model:agentForm.model||undefined})});agentResult.text=d.text||'';agentResult.raw=d})}
 async function fetchRows(path,refv){await safe(async()=>{refv.value=await api(path)})} async function loadTokens(){return fetchRows('/api/tokens',tokens)} async function loadUsers(){return fetchRows('/api/users',users)} async function loadProviderOptions(){return fetchRows('/api/providers/options',providerOptions)} async function loadProviders(){await fetchRows('/api/providers',providers);providerOptions.value=providers.value.map(p=>({id:p.id,name:p.name,providerType:p.providerType,model:p.model,apiMode:p.apiMode,enabled:p.enabled}))} async function loadChannels(){return fetchRows('/api/channels',channels)}
+async function loadClaws(){await safe(async()=>{if(has('agent:read')&&!agents.value.length){try{agents.value=(await api('/api/agents')).map(enrichAgent)}catch{agents.value=[]}}claws.value=(await api('/api/claws')).map(enrichClaw)})}
+function enrichClaw(claw){const roles=claw.roles||[];const defaultRole=roles.find(r=>r.defaultRole)||roles[0];const defaultAgentId=claw.defaultAgentId||defaultRole?.agentId;return{...claw,roleCount:roles.length,feishuBinding:claw.feishuEnabled?`${claw.feishuPeerKind||'group'}:${claw.feishuPeerId||'-'}`:'disabled',defaultAgentName:agentLabel(defaultAgentId)}}
+function agentLabel(id){if(!id)return '-';const agent=agents.value.find(item=>item.id===id);return agent?`${agent.agentKey} - ${agent.name}`:id}
+function resetClawForm(){Object.assign(clawForm,defClaw())}
+function editClaw(row){Object.assign(clawForm,{...defClaw(),...row,roles:(row.roles||[]).map((role,index)=>({...defClawRole(index),...role,mentionAliases:(role.mentionAliases||[]).join(','),commandPrefixes:(role.commandPrefixes||[]).join(',')}))})}
+function addClawRole(){clawForm.roles.push(defClawRole(clawForm.roles.length))}
+function removeClawRole(index){clawForm.roles.splice(index,1)}
+function clawPayload(){const roles=clawForm.roles.filter(role=>role.agentId&&role.roleKey&&role.displayName).map((role,index)=>({id:role.id||null,agentId:role.agentId,roleKey:role.roleKey,displayName:role.displayName,mentionAliases:csv(role.mentionAliases),commandPrefixes:csv(role.commandPrefixes),defaultRole:role.defaultRole,enabled:role.enabled,sortOrder:role.sortOrder??index}));return{name:clawForm.name,description:clawForm.description||null,status:clawForm.status||'active',defaultAgentId:clawForm.defaultAgentId||null,feishuEnabled:clawForm.feishuEnabled,feishuAccountId:clawForm.feishuAccountId||null,feishuPeerKind:clawForm.feishuPeerKind||'group',feishuPeerId:clawForm.feishuPeerId||null,feishuComment:clawForm.feishuComment||null,roles}}
+async function saveClaw(){await load(async()=>{await api(clawForm.id?`/api/claws/${clawForm.id}`:'/api/claws',{method:clawForm.id?'PUT':'POST',body:JSON.stringify(clawPayload())});resetClawForm();await loadClaws();if(has('agent:route:manage'))await loadRoutes()})}
+async function syncClawRoutes(id){await load(async()=>{await api(`/api/claws/${id}/sync-routes`,{method:'POST'});notice('Claw routes synced');await loadClaws();if(has('agent:route:manage'))await loadRoutes()})}
+async function deleteClaw(id){if(confirm('Delete Claw?'))await load(async()=>{await api(`/api/claws/${id}`,{method:'DELETE'});await loadClaws();if(has('agent:route:manage'))await loadRoutes()})}
 async function createToken(){await load(async()=>{const d=await api('/api/tokens',{method:'POST',body:JSON.stringify({name:tokenForm.name,expiresAt:tokenForm.expiresAt||null,scopes:csv(tokenForm.scopes)})});createdToken.tokenId=d.tokenId;createdToken.token=d.token;await loadTokens()})}
 async function revokeToken(id){if(confirm('Revoke token?'))await load(async()=>{await api(`/api/tokens/${id}`,{method:'DELETE'});await loadTokens()})}
 async function createUser(){await load(async()=>{await api('/api/users',{method:'POST',body:JSON.stringify(userForm)});Object.assign(userForm,{username:'',password:'',displayName:'',authorities:userForm.authorities});await loadUsers()})} async function disableUser(id){if(confirm('Disable user?'))await load(async()=>{await api(`/api/users/${id}/disable`,{method:'PUT'});await loadUsers()})}
@@ -285,7 +338,7 @@ async function deleteAgent(id){
 }
 async function loadToolCatalogOnly(){toolCatalog.value=await api('/api/tools/catalog')} async function loadTools(){await safe(async()=>{toolProfiles.value=await api('/api/tools/profiles');await loadToolCatalogOnly();await previewTools()})} async function previewTools(){await safe(async()=>{const d=await api('/api/tools/effective',{method:'POST',body:JSON.stringify({profile:toolForm.profile,allow:empty(toolForm.allow),deny:csv(toolForm.deny),alsoAllow:csv(toolForm.alsoAllow),readonly:toolForm.readonly})});toolPreview.effectiveTools=d.effectiveTools||[];toolPreview.deniedTools=d.deniedTools||[]})}
 async function loadRoutes(){await safe(async()=>{if(!agents.value.length)await loadAgents();routes.value=await api('/api/route-bindings')})} function resetRouteForm(){Object.assign(routeForm,defRoute())} function editRoute(r){Object.assign(routeForm,{...defRoute(),...r,mentionAliases:(r.mentionAliases||[]).join(','),commandPrefixes:(r.commandPrefixes||[]).join(','),senderIds:(r.senderIds||[]).join(',')})}
-function routePayload(){return{enabled:routeForm.enabled,priority:routeForm.priority,agentId:routeForm.agentId,channel:routeForm.channel||null,accountId:routeForm.accountId||null,peerKind:routeForm.peerKind||null,peerId:routeForm.peerId||null,mentionAliases:csv(routeForm.mentionAliases),commandPrefixes:csv(routeForm.commandPrefixes),senderIds:csv(routeForm.senderIds),dmScope:routeForm.dmScope,comment:routeForm.comment||null}}
+function routePayload(){return{enabled:routeForm.enabled,priority:routeForm.priority,clawId:routeForm.clawId||null,agentId:routeForm.agentId,channel:routeForm.channel||null,accountId:routeForm.accountId||null,peerKind:routeForm.peerKind||null,peerId:routeForm.peerId||null,mentionAliases:csv(routeForm.mentionAliases),commandPrefixes:csv(routeForm.commandPrefixes),senderIds:csv(routeForm.senderIds),dmScope:routeForm.dmScope,comment:routeForm.comment||null}}
 async function saveRoute(){await load(async()=>{await api(routeForm.id?`/api/route-bindings/${routeForm.id}`:'/api/route-bindings',{method:routeForm.id?'PUT':'POST',body:JSON.stringify(routePayload())});resetRouteForm();await loadRoutes()})} async function deleteRoute(id){if(confirm('Delete route?'))await load(async()=>{await api(`/api/route-bindings/${id}`,{method:'DELETE'});await loadRoutes()})}
 function csv(v){return String(v||'').split(',').map(x=>x.trim()).filter(Boolean)} function empty(v){const a=csv(v);return a.length?a:null} function parse(v){try{return String(v||'').trim()?JSON.parse(v):{}}catch{throw new Error('Invalid JSON')}} function fmt(v){try{return JSON.stringify(typeof v==='string'?JSON.parse(v):v,null,2)}catch{return v||'{}'}} function pretty(v){return v?JSON.stringify(v,null,2):'{}'} async function copy(v){await navigator.clipboard?.writeText(v)}
 async function load(fn){state.loading=true;await safe(fn);state.loading=false} async function safe(fn){state.error='';try{await fn()}catch(e){state.error=e.message||String(e)}finally{state.loading=false}} function notice(m){state.notice=m;setTimeout(()=>{if(state.notice===m)state.notice=''},2500)}
@@ -351,6 +404,17 @@ button{cursor:pointer}
 .metrics span{color:var(--muted);font-size:.82rem;font-weight:800;text-transform:uppercase}
 .metrics b{font-size:1.75rem;line-height:1.1;overflow-wrap:anywhere}
 
+.action-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.action-card{min-height:132px;text-align:left;border:1px solid var(--border);border-radius:8px;background:#fff;padding:18px;display:grid;align-content:space-between;gap:12px;box-shadow:var(--shadow);color:var(--text)}
+.action-card b{font-size:1rem;line-height:1.25}
+.action-card span{color:var(--muted);font-size:.86rem;line-height:1.45}
+.action-card:hover{border-color:#86b7fe;box-shadow:0 14px 34px rgba(13,110,253,.12)}
+.role-editor{display:grid;gap:12px;border:1px solid var(--border);border-radius:8px;background:#f8f9fa;padding:14px}
+.role-editor-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.role-editor-head h3{margin:0;font-size:.95rem}
+.role-card{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;border:1px solid #dee2e6;border-radius:8px;background:#fff;padding:14px}
+.role-actions{display:flex;align-items:end;justify-content:flex-end}
+.empty-state{border:1px dashed #ced4da;border-radius:8px;background:#fff;color:var(--muted);padding:18px;text-align:center;font-weight:750}
 .form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
 .compact-form{grid-template-columns:repeat(4,minmax(0,1fr));align-items:end}
 .form-grid h2,.form-actions,.span-2{grid-column:1/-1}
@@ -412,7 +476,7 @@ summary{cursor:pointer;color:#495057;font-weight:800}
 
 @media(max-width:1100px){
   .app-shell{grid-template-columns:220px minmax(0,1fr)}
-  .metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .metrics,.action-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .content-grid{grid-template-columns:1fr}
   .compact-form{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
@@ -423,7 +487,7 @@ summary{cursor:pointer;color:#495057;font-weight:800}
   .nav-list{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:14px}
   .topbar{align-items:flex-start;flex-direction:column}
   .user-menu{width:100%;justify-content:space-between}
-  .metrics,.form-grid,.compact-form{grid-template-columns:1fr}
+  .metrics,.action-grid,.form-grid,.compact-form,.role-card{grid-template-columns:1fr}
   .picker-groups,.picker-options{grid-template-columns:1fr}
   .panel{padding:16px}
 }

@@ -96,6 +96,7 @@ public class RouteBindingService {
                 entity.getId(),
                 entity.isEnabled(),
                 entity.getPriority(),
+                entity.getClawId(),
                 entity.getAgentId(),
                 agent == null ? null : agent.getAgentKey(),
                 agent == null ? null : agent.getName(),
@@ -121,6 +122,7 @@ public class RouteBindingService {
     private void apply(RouteBindingEntity entity, RouteBindingRequest request) {
         entity.setEnabled(request.enabled() == null || request.enabled());
         entity.setPriority(request.priority() == null ? 0 : request.priority());
+        entity.setClawId(blankToNull(request.clawId()));
         entity.setAgentId(request.agentId());
         entity.setChannel(normalize(request.channel()));
         entity.setAccountId(blankToNull(request.accountId()));

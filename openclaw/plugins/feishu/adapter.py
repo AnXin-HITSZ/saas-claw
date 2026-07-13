@@ -77,9 +77,9 @@ class FeishuTextSendAdapter:
     async def text(self, context: ChannelMessageSendTextContext) -> ChannelMessageSendResult:
         return await self._send_payload(
             context,
-            msg_type="text",
-            content={"text": context.text},
-            payload_kind="text",
+            msg_type="interactive",
+            content=_feishu_markdown_card(context.text),
+            payload_kind="card",
         )
 
     async def card(self, context: ChannelMessageSendTextContext, card: dict[str, Any]) -> ChannelMessageSendResult:
@@ -208,6 +208,21 @@ def _feishu_event_id(payload: dict[str, Any], message: dict[str, Any]) -> str:
 def _feishu_tenant_key(payload: dict[str, Any], config: ChannelRuntimeConfig) -> str | None:
     header = _feishu_header(payload)
     return _optional_str(header.get("tenant_key") or payload.get("tenant_key") or payload.get("tenantKey") or config.account_id)
+
+
+def _feishu_markdown_card(text: str) -> dict[str, Any]:
+    return {
+        "config": {"wide_screen_mode": True},
+        "elements": [
+            {
+                "tag": "div",
+                "text": {
+                    "tag": "lark_md",
+                    "content": text or " ",
+                },
+            }
+        ],
+    }
 
 
 def _verify_feishu_headers(config: ChannelRuntimeConfig, headers: dict[str, str], body: bytes) -> None:

@@ -7,6 +7,7 @@ public record RouteBindingResponse(
         String id,
         boolean enabled,
         int priority,
+        String clawId,
         String agentId,
         String agentKey,
         String agentName,

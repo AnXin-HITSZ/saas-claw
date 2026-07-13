@@ -468,8 +468,11 @@ class PlatformAdapterTests(unittest.IsolatedAsyncioTestCase):
             )
         )
 
+        sent_card = json.loads(fake_http.payload["content"])
         self.assertEqual(fake_http.headers["Authorization"], "Bearer tenant-token")
         self.assertEqual(fake_http.payload["receive_id"], "oc_1")
+        self.assertEqual(fake_http.payload["msg_type"], "interactive")
+        self.assertEqual(sent_card["elements"][0]["text"], {"tag": "lark_md", "content": "reply"})
         self.assertEqual(result.message_id, "om_reply")
 
 class SequentialQueueTests(unittest.IsolatedAsyncioTestCase):

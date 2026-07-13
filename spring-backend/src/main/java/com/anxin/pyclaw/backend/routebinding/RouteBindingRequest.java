@@ -6,6 +6,7 @@ import java.util.List;
 public record RouteBindingRequest(
         Boolean enabled,
         Integer priority,
+        String clawId,
         @NotBlank String agentId,
         String channel,
         String accountId,
