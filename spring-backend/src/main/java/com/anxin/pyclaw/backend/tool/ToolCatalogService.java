@@ -22,6 +22,9 @@ public class ToolCatalogService {
             new ToolCatalogEntryResponse("shell", "Shell", "Execute a shell command inside the workspace.", "runtime", List.of("full"), List.of("runtime", "shell", "exec", "mutation", "high-risk"), "high", true),
             new ToolCatalogEntryResponse("exec", "Exec", "OpenClaw-compatible shell command execution.", "runtime", List.of("full"), List.of("runtime", "shell", "exec", "mutation", "high-risk"), "high", true),
             new ToolCatalogEntryResponse("web_fetch", "Web Fetch", "Fetch a public HTTP(S) URL.", "web", List.of("full"), List.of("web", "fetch", "network"), "medium", false),
+            new ToolCatalogEntryResponse("host_uname", "Host Uname", "Read the ECS host kernel and system identity with uname -a over SSH.", "host", List.of("full"), List.of("host", "ssh", "runtime", "readonly"), "low", false),
+            new ToolCatalogEntryResponse("host_df", "Host Disk Usage", "Read ECS host filesystem disk usage with df -h over SSH.", "host", List.of("full"), List.of("host", "ssh", "runtime", "readonly"), "low", false),
+            new ToolCatalogEntryResponse("host_free", "Host Memory Usage", "Read ECS host memory usage with free -h over SSH.", "host", List.of("full"), List.of("host", "ssh", "runtime", "readonly"), "low", false),
             new ToolCatalogEntryResponse("web_search", "Web Search", "Search the public web.", "web", List.of("full"), List.of("web", "search", "network"), "medium", false)
     );
     private static final Map<String, Set<String>> PROFILE_TAGS = Map.of(

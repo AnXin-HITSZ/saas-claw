@@ -188,3 +188,25 @@ spring-backend/.../BootstrapDataInitializer.java
    - Also Allow 选择 group:host，或只选择 host_uname / host_df / host_free。
 4. 保存 Agent 后通过 Route 或 Agent Playground 验证工具调用。
 ```
+## Agents 页面 group:host 选择补充
+
+后续验证时发现 Agents 页面只能选择单个工具，不能直接选择 `group:host`。原因有两个：
+
+```text
+1. Spring Backend 的 /api/tools/catalog 还没有同步 host_uname / host_df / host_free。
+2. 前端 ToolPicker 只按 section 展示单个工具，没有把 group:<section> 作为可选项展示。
+```
+
+已补充：
+
+```text
+spring-backend/.../ToolCatalogService.java
+- catalog 增加 host_uname / host_df / host_free，sectionId=host
+- 现有 groups() 会自动生成 group:host
+
+pyclaw-web/src/App.vue
+- ToolPicker 在每个 section 顶部展示 group:<section>
+- host section 出现后可直接勾选 group:host
+```
+
+配置运维 Agent 时，推荐在 `Also Allow` 中勾选 `group:host`；若希望更细粒度，也可以只勾选 `host_uname`、`host_df`、`host_free` 中的一部分。
