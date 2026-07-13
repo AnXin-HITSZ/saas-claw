@@ -20,3 +20,7 @@ values-k3s.yaml
 values-k3s.yaml.bak
 *.secret.yaml
 certs/
+# Host SSH material must stay outside the repository. Store real files under
+# /opt/pyclaw-secrets/host-ssh on ECS and mount them through a Kubernetes Secret.
+known_hosts
+pyclaw_host_ops_ed25519*

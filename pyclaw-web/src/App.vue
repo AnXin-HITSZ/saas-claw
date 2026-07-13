@@ -218,7 +218,7 @@ const authorityGroups=[
   {title:'用户与 Token',items:['user:manage','token:manage_self']},
   {title:'Provider 与 Channel',items:['provider:manage','channel:manage']},
   {title:'Agent',items:['agent:read','agent:create','agent:update','agent:delete','agent:run','agent:route:manage']},
-  {title:'工具授权',items:['tool:catalog:read','tool:grant:minimal','tool:grant:readonly','tool:grant:messaging','tool:grant:coding','tool:grant:full','tool:grant:shell','tool:grant:web']},
+  {title:'工具授权',items:['tool:catalog:read','tool:grant:minimal','tool:grant:readonly','tool:grant:messaging','tool:grant:coding','tool:grant:full','tool:grant:shell','tool:grant:web','tool:grant:host']},
   {title:'审计',items:['audit:read','approval:resolve']}
 ];
 const state=reactive({apiBase:localStorage.getItem(BASE_KEY)||'',token:localStorage.getItem(TOKEN_KEY)||'',me:null,view:'dashboard',loading:false,error:'',notice:''});

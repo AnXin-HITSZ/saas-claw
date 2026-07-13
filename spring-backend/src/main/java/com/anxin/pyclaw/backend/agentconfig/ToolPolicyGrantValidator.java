@@ -16,6 +16,7 @@ public class ToolPolicyGrantValidator {
     private static final List<String> PROFILE_ORDER = List.of("minimal", "readonly", "messaging", "coding", "full");
     private static final Set<String> SHELL_TOOLS = Set.of("shell", "exec", "group:shell", "group:runtime");
     private static final Set<String> WEB_TOOLS = Set.of("web_fetch", "web_search", "group:web");
+    private static final Set<String> HOST_TOOLS = Set.of("host_uname", "host_df", "host_free", "group:host");
 
     public void validate(AgentToolPolicyRequest request, Authentication authentication) {
         Set<String> authorities = authorities(authentication);
@@ -33,6 +34,9 @@ public class ToolPolicyGrantValidator {
         }
         if (containsAny(requestedTools, WEB_TOOLS) && !authorities.contains("tool:grant:web")) {
             throw new ApiException(HttpStatus.FORBIDDEN, "Current user cannot grant web tools");
+        }
+        if (containsAny(requestedTools, HOST_TOOLS) && !authorities.contains("tool:grant:host")) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "Current user cannot grant host tools");
         }
     }
 

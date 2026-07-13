@@ -48,7 +48,7 @@ public class BootstrapDataInitializer implements CommandLineRunner {
     }
 
     private String adminAuthorities() {
-        return "user:manage,provider:manage,channel:manage,agent:read,agent:create,agent:update,agent:delete,agent:route:manage,agent:run,tool:catalog:read,tool:grant:minimal,tool:grant:readonly,tool:grant:messaging,tool:grant:coding,tool:grant:full,tool:grant:shell,tool:grant:web,audit:read,approval:resolve,token:manage_self";
+        return "user:manage,provider:manage,channel:manage,agent:read,agent:create,agent:update,agent:delete,agent:route:manage,agent:run,tool:catalog:read,tool:grant:minimal,tool:grant:readonly,tool:grant:messaging,tool:grant:coding,tool:grant:full,tool:grant:shell,tool:grant:web,tool:grant:host,audit:read,approval:resolve,token:manage_self";
     }
 
     private String mergeAuthorities(String current, String required) {
