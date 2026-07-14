@@ -37,7 +37,15 @@
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --sidebar-width: 240px;
+  --topbar-height: 56px;
+  --content-max-width: 1100px;
+  --content-gutter: 32px;
+  /* Backward-compatible aliases */
+  --bg-primary: var(--bg-deep);
+  --bg-secondary: var(--bg-surface);
+  --bg-tertiary: var(--bg-raised);
+  --border-color: var(--border);
+  --accent-hover: var(--accent-soft);
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }

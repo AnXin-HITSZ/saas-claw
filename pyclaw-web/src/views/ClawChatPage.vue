@@ -214,7 +214,7 @@ onMounted(load);
 </script>
 
 <style scoped>
-.chat-page { display: flex; flex-direction: column; height: calc(100vh - 64px); }
+.chat-page { display: flex; flex-direction: column; height: calc(100vh - var(--topbar-height) - var(--content-gutter) * 2); }
 .chat-header { display: flex; align-items: center; gap: 12px; padding-bottom: 14px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .chat-header h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
 
