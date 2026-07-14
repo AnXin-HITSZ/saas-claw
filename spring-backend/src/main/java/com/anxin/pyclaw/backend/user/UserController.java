@@ -65,6 +65,8 @@ public class UserController {
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "User not found"));
         entity.setStatus("DISABLED");
         entity.setUpdatedAt(OffsetDateTime.now());
-        return repository.save(entity);
+        UserEntity saved = repository.save(entity);
+        sandboxOrchestrator.scaleUserDeployments(saved.getId(), 0);
+        return saved;
     }
 }

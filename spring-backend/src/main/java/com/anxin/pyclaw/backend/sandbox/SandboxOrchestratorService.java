@@ -2,6 +2,10 @@ package com.anxin.pyclaw.backend.sandbox;
 
 import com.anxin.pyclaw.backend.config.PyclawSandboxProperties;
 import io.fabric8.kubernetes.api.model.ContainerBuilder;
+import io.fabric8.kubernetes.api.model.IntOrString;
+import io.fabric8.kubernetes.api.model.PodSecurityContextBuilder;
+import io.fabric8.kubernetes.api.model.SecurityContextBuilder;
+import io.fabric8.kubernetes.api.model.SeccompProfileBuilder;
 import io.fabric8.kubernetes.api.model.LocalObjectReference;
 import io.fabric8.kubernetes.api.model.LocalObjectReferenceBuilder;
 import io.fabric8.kubernetes.api.model.NamespaceBuilder;
@@ -12,6 +16,9 @@ import io.fabric8.kubernetes.api.model.ServiceBuilder;
 import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.api.model.SecretBuilder;
 import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
+import io.fabric8.kubernetes.api.model.networking.v1.NetworkPolicyBuilder;
+import io.fabric8.kubernetes.api.model.networking.v1.NetworkPolicyIngressRuleBuilder;
+import io.fabric8.kubernetes.api.model.networking.v1.NetworkPolicyPeerBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -61,6 +68,10 @@ public class SandboxOrchestratorService {
                 .endMetadata()
                 .build()).serverSideApply();
         ensureImagePullSecret(namespace);
+        ensureSandboxServiceAccount(namespace);
+        ensureResourceQuota(namespace);
+        ensureLimitRange(namespace);
+        ensureNetworkPolicies(namespace);
         log.info("ensured sandbox namespace: namespace={} user_id={}", namespace, userId);
     }
 
@@ -105,8 +116,14 @@ public class SandboxOrchestratorService {
                 .addNewEnv().withName("PYCLAW_CLAW_ID").withValue(clawId).endEnv()
                 .addNewEnv().withName("PYCLAW_OWNER_USER_ID").withValue(userId).endEnv()
                 .addNewEnv().withName("PYCLAW_CLAW_NAME").withValue(clawName == null ? "" : clawName).endEnv()
+                .addNewEnvFrom().withNewSecretRef(clawSecretName(clawId), true).endEnvFrom()
                 .addNewVolumeMount().withName("workspace").withMountPath(properties.getWorkspaceMountPath()).endVolumeMount()
                 .withResources(resources)
+                .withSecurityContext(new SecurityContextBuilder()
+                        .withAllowPrivilegeEscalation(false)
+                        .withReadOnlyRootFilesystem(false)
+                        .withNewCapabilities().addToDrop("ALL").endCapabilities()
+                        .build())
                 .build();
 
         List<LocalObjectReference> imagePullSecrets = blank(properties.getImagePullSecretName())
@@ -124,7 +141,17 @@ public class SandboxOrchestratorService {
                 .withNewTemplate()
                 .withNewMetadata().withLabels(labels).endMetadata()
                 .withNewSpec()
-                .withServiceAccountName(blank(properties.getServiceAccountName()) ? "default" : properties.getServiceAccountName())
+                .withServiceAccountName("sandbox-runner")
+                .withAutomountServiceAccountToken(false)
+                .withSecurityContext(new PodSecurityContextBuilder()
+                        .withRunAsNonRoot(true)
+                        .withRunAsUser(10001L)
+                        .withRunAsGroup(10001L)
+                        .withFsGroup(10001L)
+                        .withSeccompProfile(new SeccompProfileBuilder()
+                                .withType("RuntimeDefault")
+                                .build())
+                        .build())
                 .withImagePullSecrets(imagePullSecrets)
                 .withContainers(container)
                 .addNewVolume().withName("workspace").withNewPersistentVolumeClaim().withClaimName(pvcName).endPersistentVolumeClaim().endVolume()
@@ -147,6 +174,100 @@ public class SandboxOrchestratorService {
         log.info("ensured claw sandbox: namespace={} claw_id={} deployment={}", namespace, clawId, appName);
     }
 
+    // ---- Secret naming helpers ----
+
+    public static String clawSecretName(String clawId) {
+        return "claw-secret-" + clawId;
+    }
+
+    public static String userSecretName(String userId) {
+        return "user-secret-" + userId;
+    }
+
+    // ---- K8s Secret sync ----
+
+    public void ensureClawSecret(String userId, String clawId, Map<String, String> values) {
+        if (!properties.isEnabled()) {
+            return;
+        }
+        String namespace = namespaceForUser(userId);
+        String secretName = clawSecretName(clawId);
+        Map<String, String> labels = baseClawLabels(userId, clawId);
+        createOrUpdateSecret(namespace, secretName, labels, values);
+        log.info("ensured claw secret: namespace={} name={}", namespace, secretName);
+    }
+
+    public void ensureUserSecret(String userId, Map<String, String> values) {
+        if (!properties.isEnabled()) {
+            return;
+        }
+        String namespace = namespaceForUser(userId);
+        String secretName = userSecretName(userId);
+        Map<String, String> labels = baseUserLabels(userId);
+        createOrUpdateSecret(namespace, secretName, labels, values);
+        log.info("ensured user secret: namespace={} name={}", namespace, secretName);
+    }
+
+    public void deleteClawSecret(String userId, String clawId) {
+        if (!properties.isEnabled()) {
+            return;
+        }
+        String namespace = namespaceForUser(userId);
+        String secretName = clawSecretName(clawId);
+        client().secrets().inNamespace(namespace).withName(secretName).delete();
+        log.info("deleted claw secret: namespace={} name={}", namespace, secretName);
+    }
+
+    public void deleteClawSecretByName(String userId, String secretName) {
+        if (!properties.isEnabled()) {
+            return;
+        }
+        String namespace = namespaceForUser(userId);
+        client().secrets().inNamespace(namespace).withName(secretName).delete();
+        log.info("deleted secret: namespace={} name={}", namespace, secretName);
+    }
+
+    private void createOrUpdateSecret(String namespace, String name, Map<String, String> labels, Map<String, String> stringData) {
+        Map<String, String> encodedData = new LinkedHashMap<>();
+        for (Map.Entry<String, String> entry : stringData.entrySet()) {
+            encodedData.put(entry.getKey(), java.util.Base64.getEncoder().encodeToString(entry.getValue().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        }
+        client().secrets().inNamespace(namespace).resource(new SecretBuilder()
+                .withNewMetadata()
+                .withName(name)
+                .withLabels(labels)
+                .endMetadata()
+                .withType("Opaque")
+                .withData(encodedData)
+                .build()).serverSideApply();
+    }
+
+    // ---- Lifecycle: scale runner replicas ----
+
+    public void scaleClawDeployment(String userId, String clawId, int replicas) {
+        if (!properties.isEnabled()) {
+            return;
+        }
+        String namespace = namespaceForUser(userId);
+        String appName = resourceName("sandbox-runner", clawId);
+        client().apps().deployments().inNamespace(namespace).withName(appName).scale(replicas);
+        log.info("scaled claw deployment: namespace={} deployment={} replicas={}", namespace, appName, replicas);
+    }
+
+    public void scaleUserDeployments(String userId, int replicas) {
+        if (!properties.isEnabled()) {
+            return;
+        }
+        String namespace = namespaceForUser(userId);
+        Map<String, String> labels = Map.of(COMPONENT_LABEL, "sandbox-runner");
+        client().apps().deployments().inNamespace(namespace).withLabels(labels).list().getItems()
+                .forEach(deployment -> {
+                    client().apps().deployments().inNamespace(namespace)
+                            .withName(deployment.getMetadata().getName()).scale(replicas);
+                });
+        log.info("scaled all user deployments: namespace={} replicas={}", namespace, replicas);
+    }
+
     public void deleteClawSandbox(String userId, String clawId) {
         if (!properties.isEnabled()) {
             return;
@@ -156,8 +277,111 @@ public class SandboxOrchestratorService {
         String pvcName = resourceName("workspace", clawId);
         client().services().inNamespace(namespace).withName(appName).delete();
         client().apps().deployments().inNamespace(namespace).withName(appName).delete();
-        client().persistentVolumeClaims().inNamespace(namespace).withName(pvcName).delete();
-        log.info("deleted claw sandbox: namespace={} claw_id={}", namespace, clawId);
+        if (properties.isDeletePvcOnClawDelete()) {
+            client().persistentVolumeClaims().inNamespace(namespace).withName(pvcName).delete();
+            log.info("deleted claw sandbox with pvc: namespace={} claw_id={}", namespace, clawId);
+        } else {
+            log.info("deleted claw sandbox, pvc preserved: namespace={} claw_id={} pvc={}", namespace, clawId, pvcName);
+        }
+    }
+
+    // ---- ResourceQuota ----
+
+    private void ensureResourceQuota(String namespace) {
+        if (!properties.isResourceQuotaEnabled()) {
+            return;
+        }
+        client().resourceQuotas().inNamespace(namespace).resource(new io.fabric8.kubernetes.api.model.ResourceQuotaBuilder()
+                .withNewMetadata()
+                .withName("pyclaw-user-quota")
+                .endMetadata()
+                .withNewSpec()
+                .addToHard("requests.cpu", new Quantity(properties.getNamespaceCpuRequestQuota()))
+                .addToHard("limits.cpu", new Quantity(properties.getNamespaceCpuLimitQuota()))
+                .addToHard("requests.memory", new Quantity(properties.getNamespaceMemoryRequestQuota()))
+                .addToHard("limits.memory", new Quantity(properties.getNamespaceMemoryLimitQuota()))
+                .addToHard("persistentvolumeclaims", new Quantity(properties.getNamespacePvcQuota()))
+                .addToHard("requests.storage", new Quantity(properties.getNamespaceStorageQuota()))
+                .endSpec()
+                .build()).serverSideApply();
+        log.info("ensured resource quota: namespace={}", namespace);
+    }
+
+    // ---- LimitRange ----
+
+    private void ensureLimitRange(String namespace) {
+        if (!properties.isLimitRangeEnabled()) {
+            return;
+        }
+        client().limitRanges().inNamespace(namespace).resource(new io.fabric8.kubernetes.api.model.LimitRangeBuilder()
+                .withNewMetadata()
+                .withName("pyclaw-default-limits")
+                .endMetadata()
+                .withNewSpec()
+                .addNewLimit()
+                .withType("Container")
+                .addToDefaultRequest("cpu", new Quantity(properties.getDefaultCpuRequest()))
+                .addToDefaultRequest("memory", new Quantity(properties.getDefaultMemoryRequest()))
+                .addToDefault("cpu", new Quantity(properties.getDefaultCpuLimit()))
+                .addToDefault("memory", new Quantity(properties.getDefaultMemoryLimit()))
+                .endLimit()
+                .endSpec()
+                .build()).serverSideApply();
+        log.info("ensured limit range: namespace={}", namespace);
+    }
+
+    // ---- NetworkPolicy ----
+
+    private void ensureNetworkPolicies(String namespace) {
+        if (!properties.isNetworkPolicyEnabled()) {
+            return;
+        }
+        // Policy 1: deny all ingress by default
+        client().network().v1().networkPolicies().inNamespace(namespace).resource(new NetworkPolicyBuilder()
+                .withNewMetadata()
+                .withName("deny-ingress-by-default")
+                .endMetadata()
+                .withNewSpec()
+                .withPodSelector(new io.fabric8.kubernetes.api.model.LabelSelectorBuilder().build())
+                .withPolicyTypes("Ingress")
+                .endSpec()
+                .build()).serverSideApply();
+
+        // Policy 2: allow control plane (pyclaw namespace) to access sandbox-runners on port 8000
+        client().network().v1().networkPolicies().inNamespace(namespace).resource(new NetworkPolicyBuilder()
+                .withNewMetadata()
+                .withName("allow-control-plane-to-runner")
+                .endMetadata()
+                .withNewSpec()
+                .withPodSelector(new io.fabric8.kubernetes.api.model.LabelSelectorBuilder()
+                        .addToMatchLabels(COMPONENT_LABEL, "sandbox-runner")
+                        .build())
+                .withPolicyTypes("Ingress")
+                .withIngress(new NetworkPolicyIngressRuleBuilder()
+                        .withFrom(new NetworkPolicyPeerBuilder()
+                                .withNewNamespaceSelector()
+                                .addToMatchLabels("kubernetes.io/metadata.name", "pyclaw")
+                                .endNamespaceSelector()
+                                .build())
+                        .withPorts(new io.fabric8.kubernetes.api.model.networking.v1.NetworkPolicyPortBuilder()
+                                .withProtocol("TCP")
+                                .withPort(new IntOrString(properties.getRunnerPort()))
+                                .build())
+                        .build())
+                .endSpec()
+                .build()).serverSideApply();
+
+        log.info("ensured network policies: namespace={}", namespace);
+    }
+
+    private void ensureSandboxServiceAccount(String namespace) {
+        client().serviceAccounts().inNamespace(namespace).resource(new io.fabric8.kubernetes.api.model.ServiceAccountBuilder()
+                .withNewMetadata()
+                .withName("sandbox-runner")
+                .endMetadata()
+                .withAutomountServiceAccountToken(false)
+                .build()).serverSideApply();
+        log.info("ensured sandbox service account: namespace={}", namespace);
     }
 
     private void ensureImagePullSecret(String targetNamespace) {

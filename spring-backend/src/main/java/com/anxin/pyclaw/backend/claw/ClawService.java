@@ -85,6 +85,7 @@ public class ClawService {
         ClawEntity saved = claws.save(entity);
         replaceRoles(saved, request.roles(), OffsetDateTime.now());
         sandboxOrchestrator.ensureClawSandbox(saved.getOwnerUserId(), actorName(authentication), saved.getId(), saved.getName());
+        applyClawStatusSandbox(saved);
         audit(authentication, "claw.update", saved.getId(), true, null);
         return toResponse(saved);
     }
@@ -344,6 +345,17 @@ public class ClawService {
             return principal.actorType();
         }
         return "UNKNOWN";
+    }
+
+    private void applyClawStatusSandbox(ClawEntity claw) {
+        if (!sandboxOrchestrator.isEnabled()) {
+            return;
+        }
+        if ("active".equals(claw.getStatus())) {
+            sandboxOrchestrator.scaleClawDeployment(claw.getOwnerUserId(), claw.getId(), 1);
+        } else if ("inactive".equals(claw.getStatus())) {
+            sandboxOrchestrator.scaleClawDeployment(claw.getOwnerUserId(), claw.getId(), 0);
+        }
     }
 
     private void audit(Authentication authentication, String action, String resourceId, boolean success, String error) {

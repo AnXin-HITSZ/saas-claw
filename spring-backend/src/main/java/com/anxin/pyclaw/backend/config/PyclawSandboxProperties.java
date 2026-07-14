@@ -20,6 +20,20 @@ public class PyclawSandboxProperties {
     private String serviceAccountName = "default";
     private String imagePullSecretName;
     private String imagePullSecretSourceNamespace;
+    private boolean networkPolicyEnabled;
+    private boolean resourceQuotaEnabled;
+    private boolean limitRangeEnabled;
+    private String namespaceCpuRequestQuota = "1000m";
+    private String namespaceCpuLimitQuota = "2000m";
+    private String namespaceMemoryRequestQuota = "2Gi";
+    private String namespaceMemoryLimitQuota = "4Gi";
+    private String namespacePvcQuota = "5";
+    private String namespaceStorageQuota = "5Gi";
+    private String defaultCpuRequest = "50m";
+    private String defaultMemoryRequest = "128Mi";
+    private String defaultCpuLimit = "500m";
+    private String defaultMemoryLimit = "512Mi";
+    private boolean deletePvcOnClawDelete = true;
 
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
@@ -53,4 +67,32 @@ public class PyclawSandboxProperties {
     public void setImagePullSecretName(String imagePullSecretName) { this.imagePullSecretName = imagePullSecretName; }
     public String getImagePullSecretSourceNamespace() { return imagePullSecretSourceNamespace; }
     public void setImagePullSecretSourceNamespace(String imagePullSecretSourceNamespace) { this.imagePullSecretSourceNamespace = imagePullSecretSourceNamespace; }
+    public boolean isNetworkPolicyEnabled() { return networkPolicyEnabled; }
+    public void setNetworkPolicyEnabled(boolean networkPolicyEnabled) { this.networkPolicyEnabled = networkPolicyEnabled; }
+    public boolean isResourceQuotaEnabled() { return resourceQuotaEnabled; }
+    public void setResourceQuotaEnabled(boolean resourceQuotaEnabled) { this.resourceQuotaEnabled = resourceQuotaEnabled; }
+    public boolean isLimitRangeEnabled() { return limitRangeEnabled; }
+    public void setLimitRangeEnabled(boolean limitRangeEnabled) { this.limitRangeEnabled = limitRangeEnabled; }
+    public String getNamespaceCpuRequestQuota() { return namespaceCpuRequestQuota; }
+    public void setNamespaceCpuRequestQuota(String namespaceCpuRequestQuota) { this.namespaceCpuRequestQuota = namespaceCpuRequestQuota; }
+    public String getNamespaceCpuLimitQuota() { return namespaceCpuLimitQuota; }
+    public void setNamespaceCpuLimitQuota(String namespaceCpuLimitQuota) { this.namespaceCpuLimitQuota = namespaceCpuLimitQuota; }
+    public String getNamespaceMemoryRequestQuota() { return namespaceMemoryRequestQuota; }
+    public void setNamespaceMemoryRequestQuota(String namespaceMemoryRequestQuota) { this.namespaceMemoryRequestQuota = namespaceMemoryRequestQuota; }
+    public String getNamespaceMemoryLimitQuota() { return namespaceMemoryLimitQuota; }
+    public void setNamespaceMemoryLimitQuota(String namespaceMemoryLimitQuota) { this.namespaceMemoryLimitQuota = namespaceMemoryLimitQuota; }
+    public String getNamespacePvcQuota() { return namespacePvcQuota; }
+    public void setNamespacePvcQuota(String namespacePvcQuota) { this.namespacePvcQuota = namespacePvcQuota; }
+    public String getNamespaceStorageQuota() { return namespaceStorageQuota; }
+    public void setNamespaceStorageQuota(String namespaceStorageQuota) { this.namespaceStorageQuota = namespaceStorageQuota; }
+    public String getDefaultCpuRequest() { return defaultCpuRequest; }
+    public void setDefaultCpuRequest(String defaultCpuRequest) { this.defaultCpuRequest = defaultCpuRequest; }
+    public String getDefaultMemoryRequest() { return defaultMemoryRequest; }
+    public void setDefaultMemoryRequest(String defaultMemoryRequest) { this.defaultMemoryRequest = defaultMemoryRequest; }
+    public String getDefaultCpuLimit() { return defaultCpuLimit; }
+    public void setDefaultCpuLimit(String defaultCpuLimit) { this.defaultCpuLimit = defaultCpuLimit; }
+    public String getDefaultMemoryLimit() { return defaultMemoryLimit; }
+    public void setDefaultMemoryLimit(String defaultMemoryLimit) { this.defaultMemoryLimit = defaultMemoryLimit; }
+    public boolean isDeletePvcOnClawDelete() { return deletePvcOnClawDelete; }
+    public void setDeletePvcOnClawDelete(boolean deletePvcOnClawDelete) { this.deletePvcOnClawDelete = deletePvcOnClawDelete; }
 }

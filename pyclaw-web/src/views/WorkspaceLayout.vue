@@ -37,6 +37,9 @@
           <router-link to="/workspace/providers" class="nav-item" active-class="active">
             <span class="nav-icon">&#x26A1;</span> Provider 管理
           </router-link>
+          <router-link to="/workspace/secrets" class="nav-item" active-class="active">
+            <span class="nav-icon">&#x1F512;</span> Secret 管理
+          </router-link>
           <router-link to="/workspace/tokens" class="nav-item" active-class="active">
             <span class="nav-icon">&#x1F511;</span> API Token
           </router-link>

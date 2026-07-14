@@ -39,6 +39,9 @@ public class RouteBindingEntity {
     private String dmScope;
     @Column(length = 2048)
     private String comment;
+    private String ownerUserId;
+    @Column(nullable = false)
+    private String managedBy = "manual";
     @Column(nullable = false)
     private OffsetDateTime createdAt;
     @Column(nullable = false)
@@ -82,6 +85,10 @@ public class RouteBindingEntity {
     public void setDmScope(String dmScope) { this.dmScope = dmScope; }
     public String getComment() { return comment; }
     public void setComment(String comment) { this.comment = comment; }
+    public String getOwnerUserId() { return ownerUserId; }
+    public void setOwnerUserId(String ownerUserId) { this.ownerUserId = ownerUserId; }
+    public String getManagedBy() { return managedBy; }
+    public void setManagedBy(String managedBy) { this.managedBy = managedBy; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
     public OffsetDateTime getUpdatedAt() { return updatedAt; }

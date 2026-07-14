@@ -75,6 +75,8 @@ public class RouteBindingService {
         RouteBindingEntity entity = new RouteBindingEntity();
         entity.setId(UUID.randomUUID().toString());
         entity.setCreatedAt(now);
+        entity.setOwnerUserId(agent.getCreatedBy());
+        entity.setManagedBy("manual");
         apply(entity, request);
         entity.setUpdatedAt(now);
         RouteBindingEntity saved = bindings.save(entity);
@@ -242,12 +244,16 @@ public class RouteBindingService {
     }
 
     private boolean isOwnedByUser(RouteBindingEntity entity, String userId) {
-        // A route binding is owned by the user if they own the associated agent
+        // Direct ownership check via ownerUserId
+        if (entity.getOwnerUserId() != null && Objects.equals(entity.getOwnerUserId(), userId)) {
+            return true;
+        }
+        // Fallback: check via associated agent
         AgentConfigEntity agent = agents.findById(entity.getAgentId()).orElse(null);
         if (agent != null && Objects.equals(agent.getCreatedBy(), userId)) {
             return true;
         }
-        // Or if they own the associated claw
+        // Fallback: check via associated claw
         if (entity.getClawId() != null) {
             ClawEntity claw = claws.findById(entity.getClawId()).orElse(null);
             if (claw != null && Objects.equals(claw.getOwnerUserId(), userId)) {

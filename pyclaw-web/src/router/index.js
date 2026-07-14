@@ -68,6 +68,17 @@ const routes = [
         component: () => import("../views/PodStatusPage.vue"),
       },
       {
+        path: "claws/:id/files",
+        name: "workspace-files",
+        component: () => import("../views/WorkspaceFilesPage.vue"),
+        props: true,
+      },
+      {
+        path: "secrets",
+        name: "secrets",
+        component: () => import("../views/SecretPage.vue"),
+      },
+      {
         path: "admin/channels",
         name: "admin-channels",
         component: () => import("../views/admin/ChannelPage.vue"),

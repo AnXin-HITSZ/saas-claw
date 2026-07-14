@@ -39,6 +39,20 @@
         <p v-else class="no-data">无 Agent 角色</p>
       </div>
 
+      <!-- Sandbox Status Card -->
+      <div class="card">
+        <h3>Sandbox 状态</h3>
+        <div v-if="sandboxLoading" class="no-data">查询中...</div>
+        <div v-else-if="sandboxError" class="no-data" style="color:var(--danger)">{{ sandboxError }}</div>
+        <dl v-else>
+          <dt>Health</dt><dd><span class="status-tag" :class="sandboxHealthy ? 'active' : ''">{{ sandboxHealthy ? 'Healthy' : 'Down' }}</span></dd>
+          <dt>Workspace</dt><dd>{{ sandboxWorkspace || "—" }}</dd>
+        </dl>
+        <div style="margin-top: 12px;">
+          <router-link :to="`/workspace/claws/${claw.id}/files`" class="btn-secondary" style="text-decoration:none;font-size:12px">📁 Workspace 文件</router-link>
+        </div>
+      </div>
+
       <!-- Sessions Card -->
       <div class="card">
         <h3>会话记录</h3>
@@ -108,6 +122,10 @@ const loading = ref(true);
 const error = ref("");
 const showEdit = ref(false);
 const editForm = ref({});
+const sandboxHealthy = ref(false);
+const sandboxWorkspace = ref("");
+const sandboxLoading = ref(true);
+const sandboxError = ref("");
 
 const agentsMap = computed(() => {
   const map = {};
@@ -126,6 +144,22 @@ async function load() {
     claw.value = c;
     allAgents.value = a;
     sessions.value = s || [];
+
+    // Fetch sandbox status
+    sandboxLoading.value = true;
+    try {
+      const h = await api.get(`/api/claws/${route.params.id}/sandbox/healthz`);
+      sandboxHealthy.value = true;
+    } catch {
+      sandboxHealthy.value = false;
+    }
+    try {
+      const w = await api.get(`/api/claws/${route.params.id}/sandbox/workspace`);
+      sandboxWorkspace.value = typeof w === "string" ? w : JSON.stringify(w);
+    } catch {
+      sandboxWorkspace.value = "";
+    }
+    sandboxLoading.value = false;
   } catch (e) {
     error.value = e.message;
   } finally {

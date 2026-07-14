@@ -55,3 +55,17 @@ pyclaw:
     service-account-name: ${PYCLAW_SANDBOX_SERVICE_ACCOUNT_NAME:default}
     image-pull-secret-name: ${PYCLAW_SANDBOX_IMAGE_PULL_SECRET_NAME:}
     image-pull-secret-source-namespace: ${PYCLAW_SANDBOX_IMAGE_PULL_SECRET_SOURCE_NAMESPACE:${POD_NAMESPACE:}}
+    network-policy-enabled: ${PYCLAW_SANDBOX_NETWORK_POLICY_ENABLED:false}
+    resource-quota-enabled: ${PYCLAW_SANDBOX_RESOURCE_QUOTA_ENABLED:false}
+    limit-range-enabled: ${PYCLAW_SANDBOX_LIMIT_RANGE_ENABLED:false}
+    namespace-cpu-request-quota: ${PYCLAW_SANDBOX_NAMESPACE_CPU_REQUEST_QUOTA:1000m}
+    namespace-cpu-limit-quota: ${PYCLAW_SANDBOX_NAMESPACE_CPU_LIMIT_QUOTA:2000m}
+    namespace-memory-request-quota: ${PYCLAW_SANDBOX_NAMESPACE_MEMORY_REQUEST_QUOTA:2Gi}
+    namespace-memory-limit-quota: ${PYCLAW_SANDBOX_NAMESPACE_MEMORY_LIMIT_QUOTA:4Gi}
+    namespace-pvc-quota: ${PYCLAW_SANDBOX_NAMESPACE_PVC_QUOTA:5}
+    namespace-storage-quota: ${PYCLAW_SANDBOX_NAMESPACE_STORAGE_QUOTA:5Gi}
+    default-cpu-request: ${PYCLAW_SANDBOX_DEFAULT_CPU_REQUEST:50m}
+    default-memory-request: ${PYCLAW_SANDBOX_DEFAULT_MEMORY_REQUEST:128Mi}
+    default-cpu-limit: ${PYCLAW_SANDBOX_DEFAULT_CPU_LIMIT:500m}
+    default-memory-limit: ${PYCLAW_SANDBOX_DEFAULT_MEMORY_LIMIT:512Mi}
+    delete-pvc-on-claw-delete: ${PYCLAW_SANDBOX_DELETE_PVC_ON_CLAW_DELETE:true}
