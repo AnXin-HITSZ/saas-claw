@@ -6,6 +6,12 @@
     </div>
 
     <div v-if="loading" class="loading">加载中...</div>
+    <div v-else-if="agents.length === 0" class="empty-state">
+      <div class="empty-state-icon">🤖</div>
+      <h3>还没有 Agent 配置</h3>
+      <p>Agent 定义了 Claw 的行为方式——模型、系统提示词、工具策略和审批模式。</p>
+      <button class="btn-primary" @click="openCreate">+ 创建第一个 Agent</button>
+    </div>
     <div v-else class="agent-grid">
       <div v-for="agent in agents" :key="agent.id" class="card agent-card">
         <div class="agent-header">
@@ -26,12 +32,6 @@
           <button class="btn-sm" @click="openEdit(agent)">编辑</button>
           <button class="btn-sm btn-danger" @click="handleDelete(agent)">删除</button>
         </div>
-      </div>
-      <div v-if="agents.length === 0" class="empty-state">
-        <div class="empty-state-icon">🤖</div>
-        <h3>还没有 Agent 配置</h3>
-        <p>Agent 定义了 Claw 的行为方式——模型、系统提示词、工具策略和审批模式。</p>
-        <button class="btn-primary" @click="openCreate">+ 创建第一个 Agent</button>
       </div>
     </div>
 
