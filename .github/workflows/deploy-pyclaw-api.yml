@@ -52,8 +52,7 @@ jobs:
             rm -f .git/index.lock &&
             git fetch origin ${{ github.ref_name }} &&
             git reset --hard ${{ github.sha }} &&
-            sudo helm upgrade --install pyclaw ./helm/pyclaw \
-              --kubeconfig /etc/rancher/k3s/k3s.yaml \
+            sudo helm --kubeconfig /etc/rancher/k3s/k3s.yaml upgrade --install pyclaw ./helm/pyclaw \
               -n pyclaw \
               --create-namespace \
               -f pyclaw-values-k3s.yaml \

@@ -49,8 +49,7 @@ jobs:
             rm -f .git/index.lock &&
             git fetch origin ${{ github.ref_name }} &&
             git reset --hard ${{ github.sha }} &&
-            sudo helm upgrade --install spring-backend ./spring-backend/helm \
-              --kubeconfig /etc/rancher/k3s/k3s.yaml \
+            sudo helm --kubeconfig /etc/rancher/k3s/k3s.yaml upgrade --install spring-backend ./spring-backend/helm \
               -n pyclaw \
               --create-namespace \
               -f spring-values-k3s.yaml \
