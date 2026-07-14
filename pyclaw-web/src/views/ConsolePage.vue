@@ -8,14 +8,27 @@
           <span>PyClaw</span>
         </div>
         <nav class="navbar-links" aria-label="Console navigation">
-          <button
-            v-for="item in visibleNav"
-            :key="item.key"
-            :class="['nav-link', { active: state.view === item.key }]"
-            @click="setView(item.key)"
-          >
-            {{ item.label }}
-          </button>
+          <!-- 首页 -->
+          <button :class="['nav-link', { active: state.view === 'dashboard' }]" @click="setView('dashboard')">首页</button>
+          <!-- 工作台 下拉 -->
+          <div class="nav-dropdown" ref="wsDropdown">
+            <button
+              :class="['nav-link', { active: workspaceActive }]"
+              @click="toggleWorkspace"
+              @blur="closeWorkspace"
+            >
+              工作台
+              <span class="dropdown-arrow" :class="{ open: workspaceOpen }">▾</span>
+            </button>
+            <ul v-show="workspaceOpen" class="dropdown-menu">
+              <li v-for="item in workspaceNav" :key="item.key">
+                <button
+                  :class="{ active: state.view === item.key }"
+                  @mousedown.prevent="setView(item.key); closeWorkspace()"
+                >{{ item.label }}</button>
+              </li>
+            </ul>
+          </div>
         </nav>
         <div class="user-menu">
           <span class="status-dot"></span>
@@ -304,6 +317,13 @@ const providerForm=reactive(defProvider()), channelForm=reactive(defChannel()), 
 const tokens=ref([]),users=ref([]),providers=ref([]),providerOptions=ref([]),channels=ref([]),agents=ref([]),claws=ref([]),toolCatalog=ref([]),routes=ref([]),auditLogs=ref([]),usageRecords=ref([]),toolProfiles=ref(['minimal','readonly','messaging','coding','full']);
 const toolPreview=reactive({effectiveTools:[],deniedTools:[]});
 const visibleNav=computed(()=>nav.filter(i=>!i.authority||has(i.authority))), currentSubtitle=computed(()=>({dashboard:'Workspace',claws:'My Claws',agent:'Run agent',tokens:'API tokens',users:'Users',providers:'Providers',channels:'Channels',agents:'Agent registry',tools:'Tool policy preview',routes:'Route bindings',audit:'Audit logs',usage:'Usage records'}[state.view]||''));
+const workspaceKeys=new Set(['claws','agent','agents','providers','channels','tokens','users','tools','routes','audit','usage']);
+const workspaceNav=computed(()=>nav.filter(i=>workspaceKeys.has(i.key)&&(!i.authority||has(i.authority))));
+const workspaceOpen=ref(false);
+const wsDropdown=ref(null);
+const workspaceActive=computed(()=>workspaceKeys.has(state.view));
+function toggleWorkspace(){workspaceOpen.value=!workspaceOpen.value}
+function closeWorkspace(){setTimeout(()=>{workspaceOpen.value=false},150)}
 const channelReplyModes=computed(()=>channelForm.channelType==='wechat'?[{value:'passive_xml',label:'Passive XML'},{value:'async_worker',label:'Async Worker'}]:[{value:'async_worker',label:'Async Worker'}]);
 const usageStats=computed(()=>({totalRuns:usageRecords.value.length,totalTokens:usageRecords.value.reduce((s,r)=>s+Number(r.totalTokens||0),0)}));
 const tokenColumns=['name','scopes','expiresAt','revokedAt','createdAt'], userColumns=['username','displayName','status','authorities'], providerColumns=['name','providerType','baseUrl','model','apiMode','apiKeyConfigured','enabled'], channelColumns=['channelType','name','secretRef','enabled','updatedAt'];
@@ -474,6 +494,15 @@ function notice(m){state.notice=m;setTimeout(()=>{if(state.notice===m)state.noti
 .user-menu{display:flex;align-items:center;gap:10px;flex-shrink:0}
 .status-dot{width:9px;height:9px;border-radius:50%;background:var(--bs-green);box-shadow:0 0 0 4px rgba(25,135,84,.14)}
 .btn-sm{padding:6px 12px;font-size:.85rem;min-height:34px}
+
+/* ---- Dropdown ---- */
+.nav-dropdown{position:relative}
+.dropdown-arrow{display:inline-block;font-size:.7rem;margin-left:4px;transition:transform .2s}
+.dropdown-arrow.open{transform:rotate(180deg)}
+.dropdown-menu{position:absolute;top:100%;left:0;z-index:50;min-width:180px;margin:4px 0 0;padding:6px;list-style:none;background:#fff;border:1px solid #e9ecef;border-radius:8px;box-shadow:0 12px 36px rgba(0,0,0,.12);display:grid;gap:2px}
+.dropdown-menu button{display:block;width:100%;text-align:left;padding:8px 12px;border:0;border-radius:5px;background:transparent;color:#495057;font:inherit;font-size:.88rem;font-weight:600;cursor:pointer}
+.dropdown-menu button:hover{background:#f1f3f5;color:#212529}
+.dropdown-menu button.active{background:#212529;color:#fff}
 
 /* ---- Main ---- */
 .main{flex:1;min-width:0;padding:0 1.5rem 2rem}
