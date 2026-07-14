@@ -39,7 +39,8 @@ jobs:
 
           echo "== Deploy pyclaw-mysql =="
           set +e
-          sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm upgrade --install pyclaw-mysql ./helm/pyclaw-mysql \
+          sudo helm upgrade --install pyclaw-mysql ./helm/pyclaw-mysql \
+            --kubeconfig /etc/rancher/k3s/k3s.yaml \
             -n pyclaw \
             --create-namespace \
             -f pyclaw-mysql-values-k3s.yaml \

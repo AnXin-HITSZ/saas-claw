@@ -48,7 +48,8 @@ jobs:
             cd /opt/pyclaw &&
             git fetch origin ${{ github.ref_name }} &&
             git reset --hard ${{ github.sha }} &&
-            sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm upgrade --install spring-backend ./spring-backend/helm \
+            sudo helm upgrade --install spring-backend ./spring-backend/helm \
+              --kubeconfig /etc/rancher/k3s/k3s.yaml \
               -n pyclaw \
               --create-namespace \
               -f spring-values-k3s.yaml \
