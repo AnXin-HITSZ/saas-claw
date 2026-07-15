@@ -86,8 +86,8 @@
               <label>Shell 审批</label>
               <select v-model="form.shellApproval">
                 <option value="deny">deny</option>
-                <option value="ask">ask</option>
-                <option value="allow">allow</option>
+                <option value="require">require</option>
+                <option value="auto">auto</option>
               </select>
             </div>
           </div>

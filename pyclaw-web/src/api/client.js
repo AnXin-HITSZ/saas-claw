@@ -15,7 +15,7 @@ async function request(path, options = {}) {
     headers,
   });
 
-  if (res.status === 401 || res.status === 403) {
+  if (res.status === 401) {
     localStorage.removeItem("pyclaw.token");
     localStorage.removeItem("pyclaw.user");
     if (window.location.pathname !== "/login" && window.location.pathname !== "/register" && window.location.pathname !== "/") {
@@ -37,7 +37,7 @@ async function request(path, options = {}) {
   const data = await res.json();
 
   if (!res.ok) {
-    throw new Error(data.message || `Request failed (${res.status})`);
+    throw new Error(data.message || data.error || `Request failed (${res.status})`);
   }
 
   return data;

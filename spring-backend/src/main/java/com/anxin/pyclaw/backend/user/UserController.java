@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/users")
 public class UserController {
-    private static final String DEFAULT_USER_AUTHORITIES = "claw:read,claw:create,claw:update,claw:delete,agent:run,agent:read,agent:create,agent:update,tool:catalog:read,token:manage_self,provider:manage_self";
+    private static final String DEFAULT_USER_AUTHORITIES = "claw:read,claw:create,claw:update,claw:delete,agent:run,agent:read,agent:create,agent:update,tool:catalog:read,tool:grant:minimal,tool:grant:readonly,tool:grant:messaging,token:manage_self,provider:manage_self";
     private final UserRepository repository;
     private final PasswordEncoder passwordEncoder;
     private final SandboxOrchestratorService sandboxOrchestrator;
