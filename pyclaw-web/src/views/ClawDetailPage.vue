@@ -359,7 +359,7 @@ onMounted(load);
 
 .btn-secondary.compact { padding: 6px 10px; font-size: 12px; }
 
-.switch-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.switch-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
 
 dl { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; font-size: 13px; }
 dt { color: var(--text-muted); font-weight: 500; }
