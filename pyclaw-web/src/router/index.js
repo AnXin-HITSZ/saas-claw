@@ -49,8 +49,7 @@ const routes = [
       },
       {
         path: "playground",
-        name: "playground",
-        component: () => import("../views/PlaygroundPage.vue"),
+        redirect: "/workspace/claws",
       },
       {
         path: "tools",

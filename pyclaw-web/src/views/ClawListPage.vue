@@ -21,7 +21,7 @@
         <div class="guide-icon" aria-hidden="true">⚡</div>
         <div class="guide-copy">
           <h2>开始使用 PyClaw</h2>
-          <p>Claw 是执行容器，需要添加 Agent 角色后才能开始对话。完成配置后即可在「Agent 对话」中与 Agent 交互。</p>
+          <p>Claw 是执行容器，需要添加 Agent 角色后才能开始对话。完成配置后即可进入对应 Claw 的对话页面。</p>
           <div class="guide-steps" aria-label="开始步骤">
             <span><b>1</b> 创建 Claw</span>
             <i>→</i>

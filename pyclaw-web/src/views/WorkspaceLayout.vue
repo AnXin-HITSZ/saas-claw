@@ -12,10 +12,7 @@
           <span class="nav-icon">▣</span>
           <span>Claw 管理</span>
         </router-link>
-        <router-link to="/workspace/playground" class="nav-item">
-          <span class="nav-icon">◫</span>
-          <span>Agent 对话</span>
-        </router-link>
+
         <router-link to="/workspace/tools" class="nav-item">
           <span class="nav-icon">⌁</span>
           <span>工具目录</span>
