@@ -1,4 +1,4 @@
-﻿package com.anxin.pyclaw.backend.pyclaw;
+package com.anxin.pyclaw.backend.pyclaw;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;

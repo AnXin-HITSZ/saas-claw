@@ -1,4 +1,4 @@
-﻿package com.anxin.pyclaw.backend.tool;
+package com.anxin.pyclaw.backend.tool;
 
 import java.util.List;
 
