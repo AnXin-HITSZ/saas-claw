@@ -96,9 +96,11 @@
               <label>工作目录</label>
               <input v-model="form.workspaceDir" placeholder="/workspace" />
             </div>
-            <div class="form-group checkbox-group">
-              <label class="checkbox-label">
-                <input type="checkbox" v-model="form.enabled" /> 启用
+            <div class="form-group switch-field">
+              <label class="switch-line">
+                <span class="switch-label">启用</span>
+                <input class="switch-input" type="checkbox" v-model="form.enabled" />
+                <span class="switch-track"></span>
               </label>
             </div>
           </div>
@@ -248,8 +250,7 @@ onMounted(load);
   border-radius: 6px; color: var(--text-primary); font-size: 14px;
 }
 .form-group input:focus, .form-group textarea:focus, .form-group select:focus { outline: none; border-color: var(--accent); }
-.checkbox-group { display: flex; align-items: flex-end; }
-.checkbox-label { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text-primary); cursor: pointer; }
-.checkbox-label input { width: auto; }
+.switch-field { display: flex; align-items: flex-end; }
+.switch-field .switch-line { width: 100%; margin: 0; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; }
 </style>
