@@ -44,13 +44,17 @@
           <button class="btn-secondary compact" type="button" @click="openAddRole">添加角色</button>
         </div>
         <div v-if="claw.roles?.length" class="role-list">
-          <div v-for="role in claw.roles" :key="role.id" class="role-item">
+          <div v-for="role in claw.roles" :key="role.id || `${role.agentId}-${role.roleKey}`" class="role-item">
             <div class="role-info">
               <span class="role-name">{{ role.displayName }}</span>
               <span class="role-key">{{ role.roleKey }}</span>
               <span class="role-agent">{{ role.agentName || role.agentId }}</span>
               <span v-if="role.defaultRole" class="badge badge-accent">默认</span>
               <span v-if="!role.enabled" class="badge badge-danger">已禁用</span>
+            </div>
+            <div class="role-actions">
+              <button class="role-action" type="button" @click="openEditRole(role)">编辑</button>
+              <button class="role-action danger" type="button" @click="handleDeleteRole(role)">删除</button>
             </div>
           </div>
         </div>
@@ -114,8 +118,8 @@
     <!-- Add Role Modal -->
     <div v-if="showAddRole" class="modal-overlay" @click.self="closeAddRole">
       <div class="modal">
-        <h2>添加 Agent 角色</h2>
-        <form @submit.prevent="handleAddRole">
+        <h2>{{ editingRole ? "编辑 Agent 角色" : "添加 Agent 角色" }}</h2>
+        <form @submit.prevent="handleSaveRole">
           <div class="form-group">
             <label>Agent *</label>
             <select v-model="roleForm.agentId" required @change="syncSelectedAgent">
@@ -153,7 +157,7 @@
           </div>
           <div class="modal-actions">
             <button type="button" class="btn-secondary" @click="closeAddRole">取消</button>
-            <button type="submit" class="btn-primary" :disabled="!allAgents.length">添加</button>
+            <button type="submit" class="btn-primary" :disabled="!allAgents.length">{{ editingRole ? "保存" : "添加" }}</button>
           </div>
         </form>
       </div>
@@ -174,6 +178,7 @@ const loading = ref(true);
 const error = ref("");
 const showEdit = ref(false);
 const showAddRole = ref(false);
+const editingRole = ref(null);
 const editForm = ref({});
 const roleForm = ref(emptyRoleForm());
 const sandboxHealthy = ref(false);
@@ -240,6 +245,7 @@ function emptyRoleForm() {
 }
 
 function openAddRole() {
+  editingRole.value = null;
   const roleCount = claw.value?.roles?.length || 0;
   roleForm.value = {
     ...emptyRoleForm(),
@@ -251,8 +257,23 @@ function openAddRole() {
   showAddRole.value = true;
 }
 
+function openEditRole(role) {
+  editingRole.value = role;
+  roleForm.value = {
+    agentId: role.agentId || "",
+    roleKey: role.roleKey || "",
+    displayName: role.displayName || role.agentName || role.roleKey || "",
+    mentionAliases: joinList(role.mentionAliases),
+    commandPrefixes: joinList(role.commandPrefixes),
+    defaultRole: !!role.defaultRole,
+    enabled: role.enabled !== false,
+  };
+  showAddRole.value = true;
+}
+
 function closeAddRole() {
   showAddRole.value = false;
+  editingRole.value = null;
 }
 
 function syncSelectedAgent() {
@@ -268,6 +289,10 @@ function splitList(value) {
     .split(/[,，]/)
     .map(item => item.trim())
     .filter(Boolean);
+}
+
+function joinList(value) {
+  return (value || []).join(", ");
 }
 
 function toRoleRequest(role, index) {
@@ -286,6 +311,26 @@ function toRoleRequest(role, index) {
 
 function existingRoleRequests() {
   return (claw.value?.roles || []).map(toRoleRequest);
+}
+
+function roleMatches(item, role) {
+  if (item.id && role.id) return item.id === role.id;
+  return item.agentId === role.agentId && item.roleKey === role.roleKey;
+}
+
+function ensureDefaultRole(roles) {
+  if (roles.length && !roles.some(role => role.defaultRole)) {
+    return roles.map((role, index) => ({ ...role, defaultRole: index === 0 }));
+  }
+  return roles;
+}
+
+function reindexRoles(roles) {
+  return roles.map((role, index) => ({ ...role, sortOrder: index }));
+}
+
+function defaultAgentIdFromRoles(roles, fallback) {
+  return roles.find(role => role.defaultRole)?.agentId || fallback;
 }
 
 function baseUpdatePayload(roles, defaultAgentId = claw.value.defaultAgentId) {
@@ -312,15 +357,9 @@ async function handleUpdate() {
   } catch (e) { alert("更新失败: " + e.message); }
 }
 
-async function handleAddRole() {
-  const selectedAgent = allAgents.value.find(agent => agent.id === roleForm.value.agentId);
-  if (!selectedAgent) {
-    alert("请先选择 Agent");
-    return;
-  }
-
-  const existingRoles = existingRoleRequests();
-  const newRole = {
+function roleFromForm(selectedAgent, sortOrder, id) {
+  return {
+    id,
     agentId: selectedAgent.id,
     roleKey: roleForm.value.roleKey.trim(),
     displayName: roleForm.value.displayName.trim(),
@@ -328,19 +367,56 @@ async function handleAddRole() {
     commandPrefixes: splitList(roleForm.value.commandPrefixes),
     defaultRole: roleForm.value.defaultRole,
     enabled: roleForm.value.enabled,
-    sortOrder: existingRoles.length,
+    sortOrder,
   };
-  const roles = roleForm.value.defaultRole
-    ? existingRoles.map(role => ({ ...role, defaultRole: false })).concat(newRole)
-    : existingRoles.concat(newRole);
+}
 
-  const defaultAgentId = roleForm.value.defaultRole ? selectedAgent.id : claw.value.defaultAgentId;
+async function handleSaveRole() {
+  const selectedAgent = allAgents.value.find(agent => agent.id === roleForm.value.agentId);
+  if (!selectedAgent) {
+    alert("请先选择 Agent");
+    return;
+  }
+
+  const existingRoles = existingRoleRequests();
+  let savedIndex = existingRoles.length;
+  let roles;
+
+  if (editingRole.value) {
+    const targetRole = toRoleRequest(editingRole.value, 0);
+    const currentIndex = existingRoles.findIndex(role => roleMatches(role, targetRole));
+    savedIndex = currentIndex >= 0 ? currentIndex : existingRoles.length;
+    const editedRole = roleFromForm(selectedAgent, savedIndex, targetRole.id);
+    roles = currentIndex >= 0
+      ? existingRoles.map((role, index) => (index === currentIndex ? editedRole : role))
+      : existingRoles.concat(editedRole);
+  } else {
+    const newRole = roleFromForm(selectedAgent, existingRoles.length);
+    roles = existingRoles.concat(newRole);
+  }
+
+  roles = roleForm.value.defaultRole
+    ? roles.map((role, index) => ({ ...role, defaultRole: index === savedIndex }))
+    : ensureDefaultRole(roles);
+  roles = reindexRoles(roles);
 
   try {
-    await api.put(`/api/claws/${route.params.id}`, baseUpdatePayload(roles, defaultAgentId));
-    showAddRole.value = false;
+    await api.put(`/api/claws/${route.params.id}`, baseUpdatePayload(roles, defaultAgentIdFromRoles(roles, claw.value.defaultAgentId)));
+    closeAddRole();
     await load();
-  } catch (e) { alert("添加角色失败: " + e.message); }
+  } catch (e) { alert(`${editingRole.value ? "编辑" : "添加"}角色失败: ` + e.message); }
+}
+
+async function handleDeleteRole(role) {
+  const roleName = role.displayName || role.agentName || role.roleKey;
+  if (!confirm(`确定删除角色 "${roleName}"？`)) return;
+
+  const roles = reindexRoles(ensureDefaultRole(existingRoleRequests().filter(item => !roleMatches(item, role))));
+
+  try {
+    await api.put(`/api/claws/${route.params.id}`, baseUpdatePayload(roles, defaultAgentIdFromRoles(roles, roles.length ? roles[0].agentId : claw.value.defaultAgentId)));
+    await load();
+  } catch (e) { alert("删除角色失败: " + e.message); }
 }
 
 function formatDate(s) {
@@ -367,12 +443,16 @@ dt { color: var(--text-muted); font-weight: 500; }
 .mono { font-family: "JetBrains Mono", "Fira Code", monospace; font-size: 12px; color: var(--text-muted); }
 
 .role-list { display: flex; flex-direction: column; gap: 6px; }
-.role-item { padding: 10px 14px; background: var(--bg-deep); border-radius: var(--radius-sm); font-size: 13px; transition: background 0.2s var(--ease-out); }
-.role-item:hover { background: var(--bg-raised); }
-.role-info { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.role-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; background: var(--bg-deep); border: 1px solid transparent; border-radius: var(--radius-sm); font-size: 13px; transition: background 0.2s var(--ease-out), border-color 0.2s var(--ease-out); }
+.role-item:hover { background: var(--bg-raised); border-color: var(--border-light); }
+.role-info { min-width: 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .role-name { font-weight: 600; }
 .role-key { color: var(--text-muted); font-family: monospace; font-size: 12px; }
 .role-agent { color: var(--text-secondary); }
+.role-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.role-action { padding: 3px 6px; border: 0; border-radius: 4px; color: var(--text-muted); background: transparent; font-size: 12px; font-weight: 700; }
+.role-action:hover { color: var(--accent); background: var(--accent-glow); }
+.role-action.danger:hover { color: var(--danger); background: rgba(248,81,73,0.1); }
 
 .badge { font-size: 10px; padding: 1px 8px; border-radius: 8px; font-weight: 600; letter-spacing: 0.2px; }
 .badge-accent { background: var(--accent-glow); color: var(--accent); }

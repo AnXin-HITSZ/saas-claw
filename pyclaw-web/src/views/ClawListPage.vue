@@ -77,12 +77,21 @@
             </div>
 
             <div v-if="claw.roles?.length" class="role-list">
-              <div v-for="role in claw.roles.slice(0, 3)" :key="role.id" class="role-card">
+              <div v-for="role in claw.roles.slice(0, 3)" :key="role.id || `${role.agentId}-${role.roleKey}`" class="role-card">
                 <span class="role-dot"></span>
                 <span class="role-copy">
                   <strong>{{ role.displayName || role.agentName || role.roleKey }}</strong>
                   <small>{{ role.agentName || role.roleKey }}</small>
                 </span>
+                <button
+                  class="role-delete"
+                  type="button"
+                  title="删除角色"
+                  aria-label="删除角色"
+                  @click.stop="handleDeleteRole(claw, role)"
+                >
+                  删除
+                </button>
               </div>
               <button class="add-more-role" type="button" @click.stop="openAddRole(claw)">+ 添加更多角色</button>
             </div>
@@ -327,6 +336,22 @@ function existingRoleRequests(claw) {
   return (claw.roles || []).map(toRoleRequest);
 }
 
+function roleMatches(item, role) {
+  if (item.id && role.id) return item.id === role.id;
+  return item.agentId === role.agentId && item.roleKey === role.roleKey;
+}
+
+function ensureDefaultRole(roles) {
+  if (roles.length && !roles.some(role => role.defaultRole)) {
+    return roles.map((role, index) => ({ ...role, defaultRole: index === 0 }));
+  }
+  return roles;
+}
+
+function defaultAgentIdFromRoles(roles, fallback) {
+  return roles.find(role => role.defaultRole)?.agentId || fallback;
+}
+
 function clawUpdatePayload(claw, roles, defaultAgentId = claw.defaultAgentId) {
   return {
     name: claw.name,
@@ -398,6 +423,21 @@ async function handleAddRole() {
     await load();
   } catch (e) {
     alert("添加角色失败: " + e.message);
+  }
+}
+
+async function handleDeleteRole(claw, role) {
+  const roleName = role.displayName || role.agentName || role.roleKey;
+  if (!confirm(`确定删除角色 "${roleName}"？`)) return;
+
+  const roles = ensureDefaultRole(existingRoleRequests(claw).filter(item => !roleMatches(item, role)));
+  const defaultAgentId = defaultAgentIdFromRoles(roles, roles.length ? roles[0].agentId : claw.defaultAgentId);
+
+  try {
+    await api.put(`/api/claws/${claw.id}`, clawUpdatePayload(claw, roles, defaultAgentId));
+    await load();
+  } catch (e) {
+    alert("删除角色失败: " + e.message);
   }
 }
 
@@ -710,6 +750,7 @@ onMounted(load);
 .role-copy {
   min-width: 0;
   display: grid;
+  flex: 1;
   line-height: 1.25;
 }
 
@@ -727,6 +768,25 @@ onMounted(load);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.role-delete {
+  flex: 0 0 auto;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 4px;
+  color: var(--text-muted);
+  background: transparent;
+  font-size: 11px;
+  font-weight: 700;
+  opacity: 0.72;
+  transition: color 0.18s var(--ease-out), background 0.18s var(--ease-out), opacity 0.18s var(--ease-out);
+}
+
+.role-delete:hover {
+  color: var(--danger);
+  background: rgba(248, 81, 73, 0.1);
+  opacity: 1;
 }
 
 .add-more-role {
