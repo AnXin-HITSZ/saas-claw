@@ -5,6 +5,8 @@ import com.anxin.pyclaw.backend.sandbox.SandboxOrchestratorService;
 import com.anxin.pyclaw.backend.user.UserEntity;
 import com.anxin.pyclaw.backend.user.UserRepository;
 import java.time.OffsetDateTime;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -32,7 +34,13 @@ public class AuthService {
         if (!"ACTIVE".equals(user.getStatus()) || !passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "Invalid username or password");
         }
-        return new LoginResponse(jwtService.issue(user.getId(), user.getUsername(), user.getAuthorities()), 3600);
+        String mergedAuthorities = mergeAuthorities(user.getAuthorities(), DEFAULT_REGISTER_AUTHORITIES);
+        if (!mergedAuthorities.equals(user.getAuthorities())) {
+            user.setAuthorities(mergedAuthorities);
+            user.setUpdatedAt(OffsetDateTime.now());
+            users.save(user);
+        }
+        return new LoginResponse(jwtService.issue(user.getId(), user.getUsername(), mergedAuthorities), 3600);
     }
 
     public LoginResponse register(RegisterRequest request) {
@@ -53,6 +61,22 @@ public class AuthService {
         UserEntity saved = users.save(user);
         sandboxOrchestrator.ensureUserNamespace(saved.getId(), saved.getUsername());
         return new LoginResponse(jwtService.issue(saved.getId(), saved.getUsername(), saved.getAuthorities()), 3600);
+    }
+
+    private String mergeAuthorities(String current, String required) {
+        Set<String> values = new LinkedHashSet<>();
+        for (String source : new String[] { current, required }) {
+            if (source == null || source.isBlank()) {
+                continue;
+            }
+            for (String item : source.split(",")) {
+                String authority = item.trim();
+                if (!authority.isBlank()) {
+                    values.add(authority);
+                }
+            }
+        }
+        return String.join(",", values);
     }
 
     private String blankToNull(String value) {

@@ -98,9 +98,15 @@ public class SecurityConfig {
         private void authenticateJwt(String token) {
             Map<String, Object> payload = jwtService.verify(token);
             String userId = String.valueOf(payload.get("sub"));
-            String username = String.valueOf(payload.get("username"));
-            String authorities = String.valueOf(payload.get("authorities"));
-            setAuthentication(new AuthenticatedPrincipal(userId, username, "USER", AuthUtil.authorities(authorities)));
+            UserEntity user = users.findById(userId)
+                    .filter(value -> "ACTIVE".equals(value.getStatus()))
+                    .orElseThrow();
+            setAuthentication(new AuthenticatedPrincipal(
+                    user.getId(),
+                    user.getUsername(),
+                    "USER",
+                    AuthUtil.authorities(user.getAuthorities())
+            ));
         }
 
         private void authenticateApiToken(String token) {

@@ -4,6 +4,7 @@ import java.time.OffsetDateTime;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -13,6 +14,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ApiException.class)
     ResponseEntity<Map<String, Object>> handleApiException(ApiException exc) {
         return error(exc.status(), exc.getMessage());
+    }
+
+
+    @ExceptionHandler(AccessDeniedException.class)
+    ResponseEntity<Map<String, Object>> handleAccessDenied(AccessDeniedException exc) {
+        return error(HttpStatus.FORBIDDEN, "Forbidden");
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
