@@ -9,10 +9,8 @@ public record AgentToolPolicyResponse(
         List<String> toolsAllow,
         List<String> toolsDeny,
         List<String> toolsAlsoAllow,
-        boolean workspaceOnly,
         boolean readonly,
         String shellApproval,
-        boolean webAccess,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt
 ) {

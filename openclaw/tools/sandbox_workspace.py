@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
-import urllib.request
-import urllib.error
 from typing import Any
+from urllib.parse import quote
+import urllib.error
+import urllib.request
 
-from openclaw.tools.types import ToolDefinition
+from openclaw.tools.types import ToolDefinition, ToolExecutionContext
 
 SANDBOX_TIMEOUT_SECONDS = 15
 
@@ -23,10 +24,10 @@ def _sandbox_get(base_url: str, path: str) -> dict[str, Any] | str:
                 return json.loads(body)
             except json.JSONDecodeError:
                 return body
-    except urllib.error.HTTPError as e:
-        raise RuntimeError(f"sandbox runner returned {e.code}: {e.reason}")
-    except urllib.error.URLError as e:
-        raise RuntimeError(f"sandbox runner unreachable: {e.reason}")
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(f"sandbox runner returned {exc.code}: {exc.reason}")
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"sandbox runner unreachable: {exc.reason}")
 
 
 def _sandbox_post_json(base_url: str, path: str, payload: dict[str, Any]) -> dict[str, Any] | str:
@@ -34,43 +35,42 @@ def _sandbox_post_json(base_url: str, path: str, payload: dict[str, Any]) -> dic
     url = f"{base_url.rstrip('/')}{path}"
     try:
         data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(url, method="POST", data=data,
-                                     headers={"Content-Type": "application/json"})
+        req = urllib.request.Request(url, method="POST", data=data, headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=SANDBOX_TIMEOUT_SECONDS) as resp:
             body = resp.read().decode("utf-8")
             try:
                 return json.loads(body)
             except json.JSONDecodeError:
                 return body
-    except urllib.error.HTTPError as e:
-        raise RuntimeError(f"sandbox runner returned {e.code}: {e.reason}")
-    except urllib.error.URLError as e:
-        raise RuntimeError(f"sandbox runner unreachable: {e.reason}")
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(f"sandbox runner returned {exc.code}: {exc.reason}")
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"sandbox runner unreachable: {exc.reason}")
 
-def _sandbox_put(base_url: str, path: str, content: str) -> dict[str, Any] | str:
+
+def _sandbox_put_json(base_url: str, path: str, payload: dict[str, Any]) -> dict[str, Any] | str:
     """Perform a PUT request to the sandbox-runner API."""
     url = f"{base_url.rstrip('/')}{path}"
     try:
-        data = content.encode("utf-8")
-        req = urllib.request.Request(url, method="PUT", data=data,
-                                     headers={"Content-Type": "application/json"})
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, method="PUT", data=data, headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=SANDBOX_TIMEOUT_SECONDS) as resp:
             body = resp.read().decode("utf-8")
             try:
                 return json.loads(body)
             except json.JSONDecodeError:
                 return body
-    except urllib.error.HTTPError as e:
-        raise RuntimeError(f"sandbox runner returned {e.code}: {e.reason}")
-    except urllib.error.URLError as e:
-        raise RuntimeError(f"sandbox runner unreachable: {e.reason}")
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(f"sandbox runner returned {exc.code}: {exc.reason}")
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"sandbox runner unreachable: {exc.reason}")
 
 
 def create_sandbox_workspace_info_tool() -> ToolDefinition:
     """Return a tool that queries sandbox workspace metadata."""
 
-    async def execute(tool_args: dict[str, Any], ctx: dict[str, Any] | None = None) -> dict[str, Any]:
-        base_url = _require_sandbox_url(ctx)
+    async def execute(context: ToolExecutionContext, arguments: dict[str, Any]) -> dict[str, Any]:
+        base_url = _require_sandbox_url(context.metadata)
         result = _sandbox_get(base_url, "/v1/workspace")
         return {"result": result}
 
@@ -90,10 +90,10 @@ def create_sandbox_workspace_info_tool() -> ToolDefinition:
 def create_sandbox_list_files_tool() -> ToolDefinition:
     """Return a tool that lists files in the sandbox workspace."""
 
-    async def execute(tool_args: dict[str, Any], ctx: dict[str, Any] | None = None) -> dict[str, Any]:
-        base_url = _require_sandbox_url(ctx)
-        path = tool_args.get("path", ".")
-        result = _sandbox_get(base_url, f"/v1/workspace/files?path={path}")
+    async def execute(context: ToolExecutionContext, arguments: dict[str, Any]) -> dict[str, Any]:
+        base_url = _require_sandbox_url(context.metadata)
+        path = str(arguments.get("path", "."))
+        result = _sandbox_get(base_url, f"/v1/workspace/files?path={quote(path, safe='/._-')}")
         return {"result": result}
 
     return ToolDefinition(
@@ -114,9 +114,9 @@ def create_sandbox_list_files_tool() -> ToolDefinition:
 def create_sandbox_read_file_tool() -> ToolDefinition:
     """Return a tool that reads a file from the sandbox workspace."""
 
-    async def execute(tool_args: dict[str, Any], ctx: dict[str, Any] | None = None) -> dict[str, Any]:
-        base_url = _require_sandbox_url(ctx)
-        file_path = tool_args["file_path"]
+    async def execute(context: ToolExecutionContext, arguments: dict[str, Any]) -> dict[str, Any]:
+        base_url = _require_sandbox_url(context.metadata)
+        file_path = quote(str(arguments["file_path"]), safe="/._-")
         result = _sandbox_get(base_url, f"/v1/workspace/files/{file_path}")
         return {"result": result}
 
@@ -138,13 +138,13 @@ def create_sandbox_read_file_tool() -> ToolDefinition:
 def create_sandbox_write_file_tool() -> ToolDefinition:
     """Return a tool that writes a file to the sandbox workspace."""
 
-    async def execute(tool_args: dict[str, Any], ctx: dict[str, Any] | None = None) -> dict[str, Any]:
-        base_url = _require_sandbox_url(ctx)
-        file_path = tool_args["file_path"]
-        content = tool_args["content"]
+    async def execute(context: ToolExecutionContext, arguments: dict[str, Any]) -> dict[str, Any]:
+        base_url = _require_sandbox_url(context.metadata)
+        file_path = quote(str(arguments["file_path"]), safe="/._-")
+        content = arguments["content"]
         if not isinstance(content, str):
             content = json.dumps(content)
-        result = _sandbox_put(base_url, f"/v1/workspace/files/{file_path}", content)
+        result = _sandbox_put_json(base_url, f"/v1/workspace/files/{file_path}", {"content": content})
         return {"result": result}
 
     return ToolDefinition(
@@ -162,16 +162,17 @@ def create_sandbox_write_file_tool() -> ToolDefinition:
         execute=execute,
     )
 
+
 def create_sandbox_apply_patch_tool() -> ToolDefinition:
     """Return a tool that applies an exact-text patch in the sandbox workspace."""
 
-    async def execute(tool_args: dict[str, Any], ctx: dict[str, Any] | None = None) -> dict[str, Any]:
-        base_url = _require_sandbox_url(ctx)
+    async def execute(context: ToolExecutionContext, arguments: dict[str, Any]) -> dict[str, Any]:
+        base_url = _require_sandbox_url(context.metadata)
         payload = {
-            "file_path": tool_args["file_path"],
-            "old_text": tool_args["old_text"],
-            "new_text": tool_args["new_text"],
-            "replace_all": bool(tool_args.get("replace_all", False)),
+            "file_path": arguments["file_path"],
+            "old_text": arguments["old_text"],
+            "new_text": arguments["new_text"],
+            "replace_all": bool(arguments.get("replace_all", False)),
         }
         result = _sandbox_post_json(base_url, "/v1/workspace/patches", payload)
         return {"result": result}
@@ -193,10 +194,11 @@ def create_sandbox_apply_patch_tool() -> ToolDefinition:
         execute=execute,
     )
 
+
 def _require_sandbox_url(ctx: dict[str, Any] | None) -> str:
     if not ctx:
         raise RuntimeError("sandbox tool requires runtime context (sandbox_base_url)")
     base_url = ctx.get("sandbox_base_url")
     if not base_url:
         raise RuntimeError("sandbox_base_url is not configured for this Claw sandbox")
-    return base_url
+    return str(base_url)

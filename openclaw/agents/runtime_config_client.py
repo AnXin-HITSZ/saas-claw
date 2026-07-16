@@ -19,10 +19,8 @@ class AgentRuntimeToolPolicy:
     allow: list[str] | None = None
     deny: list[str] = field(default_factory=list)
     also_allow: list[str] = field(default_factory=list)
-    workspace_only: bool = True
     readonly: bool = False
     shell_approval: str = "deny"
-    web_access: bool = False
 
 
 @dataclass(frozen=True)
@@ -86,10 +84,8 @@ class RuntimeConfigClient:
                 allow=_list_or_none(policy.get("allow")),
                 deny=_list(policy.get("deny")),
                 also_allow=_list(policy.get("alsoAllow") or policy.get("also_allow")),
-                workspace_only=_bool(policy.get("workspaceOnly") or policy.get("workspace_only"), True),
                 readonly=_bool(policy.get("readonly"), False),
                 shell_approval=str(policy.get("shellApproval") or policy.get("shell_approval") or "deny"),
-                web_access=_bool(policy.get("webAccess") or policy.get("web_access"), False),
             ),
             config_version=_optional_str(payload.get("configVersion") or payload.get("config_version")),
         )

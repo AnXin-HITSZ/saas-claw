@@ -23,13 +23,9 @@ public class AgentToolPolicyEntity {
     @Lob
     private String toolsAlsoAllowJson;
     @Column(nullable = false)
-    private boolean workspaceOnly;
-    @Column(nullable = false)
     private boolean readonly;
     @Column(nullable = false)
     private String shellApproval;
-    @Column(nullable = false)
-    private boolean webAccess;
     @Column(nullable = false)
     private OffsetDateTime createdAt;
     @Column(nullable = false)
@@ -47,14 +43,10 @@ public class AgentToolPolicyEntity {
     public void setToolsDenyJson(String toolsDenyJson) { this.toolsDenyJson = toolsDenyJson; }
     public String getToolsAlsoAllowJson() { return toolsAlsoAllowJson; }
     public void setToolsAlsoAllowJson(String toolsAlsoAllowJson) { this.toolsAlsoAllowJson = toolsAlsoAllowJson; }
-    public boolean isWorkspaceOnly() { return workspaceOnly; }
-    public void setWorkspaceOnly(boolean workspaceOnly) { this.workspaceOnly = workspaceOnly; }
     public boolean isReadonly() { return readonly; }
     public void setReadonly(boolean readonly) { this.readonly = readonly; }
     public String getShellApproval() { return shellApproval; }
     public void setShellApproval(String shellApproval) { this.shellApproval = shellApproval; }
-    public boolean isWebAccess() { return webAccess; }
-    public void setWebAccess(boolean webAccess) { this.webAccess = webAccess; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
     public OffsetDateTime getUpdatedAt() { return updatedAt; }

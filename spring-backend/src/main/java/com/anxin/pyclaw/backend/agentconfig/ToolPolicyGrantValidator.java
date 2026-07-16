@@ -1,7 +1,6 @@
 package com.anxin.pyclaw.backend.agentconfig;
 
 import com.anxin.pyclaw.backend.common.ApiException;
-import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -14,25 +13,12 @@ import org.springframework.stereotype.Service;
 @Service
 public class ToolPolicyGrantValidator {
     private static final List<String> PROFILE_ORDER = List.of("minimal", "readonly", "messaging", "coding", "full");
-    private static final Set<String> SHELL_TOOLS = Set.of("shell", "exec", "group:shell", "group:runtime");
-    private static final Set<String> WEB_TOOLS = Set.of("web_fetch", "web_search", "group:web");
 
     public void validate(AgentToolPolicyRequest request, Authentication authentication) {
         Set<String> authorities = authorities(authentication);
         String profile = normalizeProfile(request == null ? null : request.profile());
         if (!canGrantProfile(authorities, profile)) {
             throw new ApiException(HttpStatus.FORBIDDEN, "Current user cannot grant tool profile: " + profile);
-        }
-        List<String> requestedTools = new java.util.ArrayList<>();
-        if (request != null) {
-            addAll(requestedTools, request.toolsAllow());
-            addAll(requestedTools, request.toolsAlsoAllow());
-        }
-        if (containsAny(requestedTools, SHELL_TOOLS) && !authorities.contains("tool:grant:shell")) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "Current user cannot grant shell tools");
-        }
-        if (containsAny(requestedTools, WEB_TOOLS) && !authorities.contains("tool:grant:web")) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "Current user cannot grant web tools");
         }
     }
 
@@ -81,22 +67,6 @@ public class ToolPolicyGrantValidator {
         return authentication.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .collect(Collectors.toSet());
-    }
-
-    private boolean containsAny(Collection<String> values, Set<String> targets) {
-        for (String value : values) {
-            String normalized = normalize(value);
-            if (normalized != null && targets.contains(normalized)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private void addAll(List<String> target, List<String> source) {
-        if (source != null) {
-            target.addAll(source);
-        }
     }
 
     private String normalize(String value) {

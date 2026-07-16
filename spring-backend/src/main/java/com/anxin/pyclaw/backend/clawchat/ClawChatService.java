@@ -121,7 +121,6 @@ public class ClawChatService {
                 ? namingService.serviceBaseUrl(claw.getOwnerUserId(), claw.getId())
                 : null;
 
-        String workspaceMode = sandboxProperties.isEnabled() ? "sandbox_runner" : "local";
         List<String> toolsAllow = agentConfigService.readList(policy.getToolsAllowJson());
         List<String> toolsDeny = agentConfigService.readList(policy.getToolsDenyJson());
         List<String> toolsAlsoAllow = agentConfigService.readList(policy.getToolsAlsoAllowJson());
@@ -130,9 +129,7 @@ public class ClawChatService {
                 toolsAllow,
                 toolsDeny,
                 toolsAlsoAllow,
-                policy.isReadonly(),
-                workspaceMode,
-                policy.isWebAccess()
+                policy.isReadonly()
         ));
         String systemPrompt = promptComposer.compose(agent.getSystemPrompt(), resolvedTools.promptFragments());
         List<String> runtimeToolsAllow = resolvedTools.tools().stream()
@@ -161,8 +158,7 @@ public class ClawChatService {
                 claw.getName(),
                 resolved.roleKey(),
                 agent.getAgentKey(),
-                sandboxBaseUrl,
-                workspaceMode
+                sandboxBaseUrl
         );
 
         boolean success = false;

@@ -64,6 +64,8 @@ class ToolMetadata:
     source: ToolSource = "core"
     plugin_id: str | None = None
     expose_to_llm: bool = True
+    readonly: bool = False
+    requires_approval: bool = False
     workspace_only: bool = True
 
 

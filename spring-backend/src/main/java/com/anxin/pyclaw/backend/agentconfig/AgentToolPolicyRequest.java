@@ -7,9 +7,7 @@ public record AgentToolPolicyRequest(
         List<String> toolsAllow,
         List<String> toolsDeny,
         List<String> toolsAlsoAllow,
-        Boolean workspaceOnly,
         Boolean readonly,
-        String shellApproval,
-        Boolean webAccess
+        String shellApproval
 ) {
 }

@@ -7,9 +7,7 @@ public record AgentRuntimeToolPolicyResponse(
         List<String> allow,
         List<String> deny,
         List<String> alsoAllow,
-        boolean workspaceOnly,
         boolean readonly,
-        String shellApproval,
-        boolean webAccess
+        String shellApproval
 ) {
 }

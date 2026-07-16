@@ -11,8 +11,6 @@ public record ToolCatalogEntryResponse(
         List<String> profiles,
         List<String> tags,
         String risk,
-        boolean workspaceOnly,
-        List<String> workspaceModes,
         boolean readonly,
         boolean requiresApproval,
         String promptHint

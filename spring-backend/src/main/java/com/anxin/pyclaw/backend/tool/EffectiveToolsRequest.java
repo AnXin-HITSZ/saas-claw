@@ -7,8 +7,6 @@ public record EffectiveToolsRequest(
         List<String> allow,
         List<String> deny,
         List<String> alsoAllow,
-        Boolean readonly,
-        String workspaceMode,
-        Boolean webAccess
+        Boolean readonly
 ) {
 }

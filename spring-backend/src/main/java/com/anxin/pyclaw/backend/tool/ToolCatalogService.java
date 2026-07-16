@@ -36,11 +36,7 @@ public class ToolCatalogService {
                 request == null ? null : request.allow(),
                 request == null ? List.of() : request.deny(),
                 request == null ? List.of() : request.alsoAllow(),
-                request != null && Boolean.TRUE.equals(request.readonly()),
-                request == null || request.workspaceMode() == null || request.workspaceMode().isBlank()
-                        ? "sandbox_runner"
-                        : request.workspaceMode(),
-                request != null && Boolean.TRUE.equals(request.webAccess())
+                request != null && Boolean.TRUE.equals(request.readonly())
         ));
         return new EffectiveToolsResponse(
                 resolved.profile(),
@@ -59,8 +55,6 @@ public class ToolCatalogService {
                 entry.profiles(),
                 entry.tags(),
                 entry.risk(),
-                entry.workspaceOnly(),
-                entry.workspaceModes(),
                 entry.readonly(),
                 entry.requiresApproval(),
                 entry.promptHint()

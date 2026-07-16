@@ -5,24 +5,14 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from openclaw.tools.fs.apply_patch import create_apply_patch_tool
-from openclaw.tools.fs.edit import create_edit_tool
-from openclaw.tools.fs.find import create_find_tool
-from openclaw.tools.fs.grep import create_grep_tool
-from openclaw.tools.fs.list_dir import create_list_dir_tool, create_ls_tool
-from openclaw.tools.fs.read import create_read_tool
-from openclaw.tools.fs.write import create_write_tool
 from openclaw.tools.sandbox_workspace import (
+    create_sandbox_apply_patch_tool,
     create_sandbox_list_files_tool,
     create_sandbox_read_file_tool,
     create_sandbox_workspace_info_tool,
     create_sandbox_write_file_tool,
-    create_sandbox_apply_patch_tool,
 )
-from openclaw.tools.shell.exec import create_exec_tool, create_shell_tool
 from openclaw.tools.types import ToolDefinition, ToolMetadata, ToolRisk, ToolSource
-from openclaw.tools.web.fetch import create_web_fetch_tool
-from openclaw.tools.web.search import create_web_search_tool
 
 ToolFactory = Callable[[], ToolDefinition]
 
@@ -41,149 +31,13 @@ class ToolCatalogEntry:
     source: ToolSource = "core"
     plugin_id: str | None = None
     expose_to_llm: bool = True
-    workspace_only: bool = True
-    include_in_openclaw_group: bool = False
-    workspace_modes: tuple[str, ...] = ("local", "sandbox_runner")
     readonly: bool = False
     requires_approval: bool = False
     prompt_hint: str = ""
-    user_visible: bool = False
+    include_in_openclaw_group: bool = False
 
 
 CORE_TOOL_CATALOG: tuple[ToolCatalogEntry, ...] = (
-    ToolCatalogEntry(
-        id="read",
-        name="read",
-        label="Read",
-        description="Read a UTF-8 text file from the workspace.",
-        section_id="filesystem",
-        factory=create_read_tool,
-        profiles=("readonly", "coding", "full"),
-        tags=("fs", "read", "readonly"),
-        risk="low",
-        include_in_openclaw_group=True,
-    ),
-    ToolCatalogEntry(
-        id="list_dir",
-        name="list_dir",
-        label="List Directory",
-        description="List files and directories inside the workspace.",
-        section_id="filesystem",
-        factory=create_list_dir_tool,
-        profiles=("readonly", "coding", "full"),
-        tags=("fs", "list", "readonly"),
-        risk="low",
-        include_in_openclaw_group=True,
-    ),
-    ToolCatalogEntry(
-        id="ls",
-        name="ls",
-        label="Ls",
-        description="Alias for list_dir, compatible with OpenClaw session tools.",
-        section_id="filesystem",
-        factory=create_ls_tool,
-        profiles=("readonly", "coding", "full"),
-        tags=("fs", "list", "readonly", "alias"),
-        risk="low",
-        include_in_openclaw_group=True,
-    ),
-    ToolCatalogEntry(
-        id="grep",
-        name="grep",
-        label="Grep",
-        description="Search UTF-8 workspace files for text or regular-expression matches.",
-        section_id="filesystem",
-        factory=create_grep_tool,
-        profiles=("readonly", "coding", "full"),
-        tags=("fs", "search", "readonly"),
-        risk="low",
-        include_in_openclaw_group=True,
-    ),
-    ToolCatalogEntry(
-        id="find",
-        name="find",
-        label="Find",
-        description="Find files or directories in the workspace by name glob.",
-        section_id="filesystem",
-        factory=create_find_tool,
-        profiles=("readonly", "coding", "full"),
-        tags=("fs", "find", "readonly"),
-        risk="low",
-        include_in_openclaw_group=True,
-    ),
-    ToolCatalogEntry(
-        id="write",
-        name="write",
-        label="Write",
-        description="Write UTF-8 text to a workspace file.",
-        section_id="filesystem",
-        factory=create_write_tool,
-        profiles=("coding", "full"),
-        tags=("fs", "write", "mutation"),
-        risk="medium",
-        include_in_openclaw_group=True,
-    ),
-    ToolCatalogEntry(
-        id="edit",
-        name="edit",
-        label="Edit",
-        description="Replace exact UTF-8 text in a workspace file.",
-        section_id="filesystem",
-        factory=create_edit_tool,
-        profiles=("coding", "full"),
-        tags=("fs", "edit", "mutation"),
-        risk="medium",
-        include_in_openclaw_group=True,
-    ),
-    ToolCatalogEntry(
-        id="apply_patch",
-        name="apply_patch",
-        label="Apply Patch",
-        description="Apply a conservative exact-text patch to a workspace file.",
-        section_id="filesystem",
-        factory=create_apply_patch_tool,
-        profiles=("coding", "full"),
-        tags=("fs", "edit", "patch", "mutation"),
-        risk="medium",
-        include_in_openclaw_group=True,
-    ),
-    ToolCatalogEntry(
-        id="shell",
-        name="shell",
-        label="Shell",
-        description="Execute a shell command inside the workspace.",
-        section_id="runtime",
-        factory=create_shell_tool,
-        profiles=("full",),
-        tags=("runtime", "shell", "exec", "legacy", "mutation", "high-risk"),
-        risk="high",
-    ),
-    ToolCatalogEntry(
-        id="exec",
-        name="exec",
-        label="Exec",
-        description="OpenClaw-compatible shell command execution entry point.",
-        section_id="runtime",
-        factory=create_exec_tool,
-        profiles=("full",),
-        tags=("runtime", "shell", "exec", "mutation", "high-risk"),
-        risk="high",
-    ),
-    ToolCatalogEntry(
-        id="web_fetch",
-        name="web_fetch",
-        label="Web Fetch",
-        description="Fetch a public HTTP(S) URL with SSRF protection.",
-        section_id="web",
-        factory=create_web_fetch_tool,
-        profiles=("full",),
-        tags=("web", "fetch", "network"),
-        risk="medium",
-        workspace_only=False,
-        user_visible=True,
-        workspace_modes=("local", "sandbox_runner"),
-        prompt_hint="Fetch a public HTTP(S) URL when the user provides a concrete link.",
-    ),
     ToolCatalogEntry(
         id="sandbox_workspace_info",
         name="sandbox_workspace_info",
@@ -191,30 +45,26 @@ CORE_TOOL_CATALOG: tuple[ToolCatalogEntry, ...] = (
         description="Get information about the Claw sandbox workspace.",
         section_id="sandbox",
         factory=create_sandbox_workspace_info_tool,
-        profiles=("minimal", "readonly", "coding", "full", "messaging"),
+        profiles=("minimal", "readonly", "coding", "messaging", "full"),
         tags=("sandbox", "workspace", "readonly"),
         risk="low",
-        workspace_only=False,
-        workspace_modes=("sandbox_runner",),
         readonly=True,
+        include_in_openclaw_group=True,
         prompt_hint="Inspect the current Claw sandbox workspace identity and root directory.",
-        user_visible=True,
     ),
     ToolCatalogEntry(
         id="sandbox_list_files",
         name="sandbox_list_files",
         label="Sandbox List Files",
-        description="List files in the Claw sandbox workspace directory tree.",
+        description="List files and directories in the Claw sandbox workspace directory tree.",
         section_id="sandbox",
         factory=create_sandbox_list_files_tool,
-        profiles=("minimal", "readonly", "coding", "full", "messaging"),
+        profiles=("minimal", "readonly", "coding", "messaging", "full"),
         tags=("sandbox", "files", "readonly"),
         risk="low",
-        workspace_only=False,
-        workspace_modes=("sandbox_runner",),
         readonly=True,
+        include_in_openclaw_group=True,
         prompt_hint="List files and directories in the current Claw sandbox workspace.",
-        user_visible=True,
     ),
     ToolCatalogEntry(
         id="sandbox_read_file",
@@ -223,14 +73,12 @@ CORE_TOOL_CATALOG: tuple[ToolCatalogEntry, ...] = (
         description="Read a UTF-8 text file from the Claw sandbox workspace.",
         section_id="sandbox",
         factory=create_sandbox_read_file_tool,
-        profiles=("minimal", "readonly", "coding", "full", "messaging"),
+        profiles=("minimal", "readonly", "coding", "messaging", "full"),
         tags=("sandbox", "files", "readonly"),
         risk="low",
-        workspace_only=False,
-        workspace_modes=("sandbox_runner",),
         readonly=True,
+        include_in_openclaw_group=True,
         prompt_hint="Read a UTF-8 text file from the current Claw sandbox workspace.",
-        user_visible=True,
     ),
     ToolCatalogEntry(
         id="sandbox_write_file",
@@ -242,10 +90,8 @@ CORE_TOOL_CATALOG: tuple[ToolCatalogEntry, ...] = (
         profiles=("coding", "full"),
         tags=("sandbox", "files", "mutation"),
         risk="medium",
-        workspace_only=False,
-        workspace_modes=("sandbox_runner",),
+        include_in_openclaw_group=True,
         prompt_hint="Write a UTF-8 text file in the current Claw sandbox workspace.",
-        user_visible=True,
     ),
     ToolCatalogEntry(
         id="sandbox_apply_patch",
@@ -257,25 +103,8 @@ CORE_TOOL_CATALOG: tuple[ToolCatalogEntry, ...] = (
         profiles=("coding", "full"),
         tags=("sandbox", "files", "patch", "mutation"),
         risk="medium",
-        workspace_only=False,
-        workspace_modes=("sandbox_runner",),
+        include_in_openclaw_group=True,
         prompt_hint="Apply an exact-text replacement patch inside the current Claw sandbox workspace.",
-        user_visible=True,
-    ),
-    ToolCatalogEntry(
-        id="web_search",
-        name="web_search",
-        label="Web Search",
-        description="Search the public web and return result titles and URLs.",
-        section_id="web",
-        factory=create_web_search_tool,
-        profiles=("full",),
-        tags=("web", "search", "network"),
-        risk="medium",
-        workspace_only=False,
-        user_visible=True,
-        workspace_modes=("local", "sandbox_runner"),
-        prompt_hint="Search the public web when the Agent needs to discover external pages or references.",
     ),
 )
 
@@ -285,7 +114,7 @@ def list_catalog_entries() -> list[ToolCatalogEntry]:
 
 
 def user_visible_catalog() -> list[ToolCatalogEntry]:
-    return [entry for entry in CORE_TOOL_CATALOG if entry.user_visible]
+    return list_catalog_entries()
 
 
 def materialize_catalog_entry(entry: ToolCatalogEntry) -> ToolDefinition:
@@ -308,7 +137,8 @@ def materialize_catalog_entry(entry: ToolCatalogEntry) -> ToolDefinition:
             source=entry.source,
             plugin_id=entry.plugin_id,
             expose_to_llm=entry.expose_to_llm,
-            workspace_only=entry.workspace_only,
+            readonly=entry.readonly,
+            requires_approval=entry.requires_approval,
         ),
     )
 

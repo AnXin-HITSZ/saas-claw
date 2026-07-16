@@ -15,11 +15,6 @@
           @click="activeProfile = p"
         >{{ p }}</button>
       </div>
-      <label class="switch-line web-switch">
-        <span class="switch-label">允许 Web 工具</span>
-        <input class="switch-input" type="checkbox" v-model="webAccess" />
-        <span class="switch-track"></span>
-      </label>
     </div>
 
     <div v-if="loading" class="loading">加载中...</div>
@@ -71,7 +66,6 @@ const loading = ref(true);
 const resolving = ref(false);
 const error = ref("");
 const activeProfile = ref("");
-const webAccess = ref(false);
 
 async function load() {
   loading.value = true;
@@ -101,8 +95,6 @@ async function resolveEffective() {
       deny: [],
       alsoAllow: [],
       readonly: activeProfile.value === "readonly",
-      workspaceMode: "sandbox_runner",
-      webAccess: webAccess.value,
     });
     effectiveNames.value = result.effectiveTools || [];
     deniedTools.value = result.deniedTools || [];
@@ -118,7 +110,7 @@ const effectiveTools = computed(() => {
   return catalog.value.filter(tool => names.has(tool.name));
 });
 
-watch([activeProfile, webAccess], () => {
+watch(activeProfile, () => {
   if (!loading.value) resolveEffective();
 });
 
@@ -139,7 +131,6 @@ onMounted(load);
 }
 .tab:hover { color: var(--text-primary); }
 .tab.active { background: rgba(240,163,58,0.1); color: var(--accent); border-color: var(--accent); }
-.web-switch { min-width: 180px; margin: 0; }
 .tool-table-wrap { overflow-x: auto; }
 .tool-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .tool-table th { text-align: left; padding: 10px 12px; background: var(--bg-secondary); color: var(--text-secondary); font-weight: 600; border-bottom: 1px solid var(--border-color); }

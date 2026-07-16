@@ -96,13 +96,7 @@
               <label>工作目录</label>
               <input v-model="form.workspaceDir" placeholder="/workspace" />
             </div>
-            <div class="form-group switch-field">
-              <label class="switch-line">
-                <span class="switch-label">允许 Web 工具</span>
-                <input class="switch-input" type="checkbox" v-model="form.webAccess" />
-                <span class="switch-track"></span>
-              </label>
-            </div>
+            <div class="form-group"></div>
           </div>
           <div class="form-row single-switch-row">
             <div class="form-group switch-field">
@@ -153,7 +147,7 @@ function openCreate() {
   form.value = {
     agentKey: "", name: "", description: "", providerId: "", model: "",
     systemPrompt: "", toolProfile: "messaging", shellApproval: "deny",
-    workspaceDir: "", enabled: true, webAccess: false,
+    workspaceDir: "", enabled: true,
   };
   showModal.value = true;
 }
@@ -171,7 +165,6 @@ function openEdit(agent) {
     shellApproval: agent.toolPolicy?.shellApproval || "deny",
     workspaceDir: agent.workspaceDir || "",
     enabled: agent.enabled,
-    webAccess: Boolean(agent.toolPolicy?.webAccess),
   };
   showModal.value = true;
 }
@@ -192,9 +185,7 @@ async function handleSave() {
         shellApproval: form.value.shellApproval,
         toolsDeny: [],
         toolsAlsoAllow: [],
-        workspaceOnly: true,
         readonly: false,
-        webAccess: Boolean(form.value.webAccess),
       },
     };
     if (editing.value) {

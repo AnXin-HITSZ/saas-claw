@@ -11,8 +11,6 @@ public record PyclawToolCatalogEntry(
         List<String> profiles,
         List<String> tags,
         String risk,
-        @JsonProperty("workspace_only") boolean workspaceOnly,
-        @JsonProperty("workspace_modes") List<String> workspaceModes,
         boolean readonly,
         @JsonProperty("requires_approval") boolean requiresApproval,
         @JsonProperty("prompt_hint") String promptHint

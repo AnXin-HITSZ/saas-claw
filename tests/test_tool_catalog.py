@@ -7,10 +7,13 @@ class ToolCatalogTests(unittest.TestCase):
     def test_catalog_metadata_is_applied_to_materialized_tools(self):
         tools = {tool.name: tool for tool in core_tool_definitions()}
 
-        self.assertEqual(tools["read"].metadata.section_id, "filesystem")
-        self.assertIn("readonly", tools["read"].metadata.tags)
-        self.assertEqual(tools["exec"].metadata.risk, "high")
-        self.assertFalse(tools["web_fetch"].metadata.workspace_only)
+        self.assertIn("sandbox_read_file", tools)
+        self.assertEqual(tools["sandbox_read_file"].metadata.section_id, "sandbox")
+        self.assertIn("readonly", tools["sandbox_read_file"].metadata.tags)
+        self.assertTrue(tools["sandbox_read_file"].metadata.readonly)
+        self.assertEqual(tools["sandbox_apply_patch"].metadata.risk, "medium")
+        self.assertNotIn("read", tools)
+        self.assertNotIn("web_fetch", tools)
 
 
 if __name__ == "__main__":

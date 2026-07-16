@@ -22,8 +22,7 @@ public record PyclawAgentRunRequest(
         @JsonProperty("claw_name") String clawName,
         @JsonProperty("role_key") String roleKey,
         @JsonProperty("agent_key") String agentKey,
-        @JsonProperty("sandbox_base_url") String sandboxBaseUrl,
-        @JsonProperty("workspace_mode") String workspaceMode
+        @JsonProperty("sandbox_base_url") String sandboxBaseUrl
 ) {
     public PyclawAgentRunRequest {
         if (toolProfile == null || toolProfile.isBlank()) {
@@ -47,17 +46,14 @@ public record PyclawAgentRunRequest(
         if (!"auto".equals(shellApproval) && !"require".equals(shellApproval) && !"deny".equals(shellApproval)) {
             shellApproval = "deny";
         }
-        if (!"local".equals(workspaceMode) && !"sandbox_runner".equals(workspaceMode)) {
-            workspaceMode = "local";
-        }
     }
-    /** Backward-compatible constructor without Claw context fields. */
+
     public PyclawAgentRunRequest(
             String prompt, String provider, String sessionId, String toolProfile,
             String model, String apiMode, String baseUrl, String apiKey
     ) {
         this(prompt, provider, sessionId, toolProfile, model, apiMode, baseUrl, apiKey,
                 null, null, null, null, null,
-                null, null, null, null, null, null, null);
+                null, null, null, null, null, null);
     }
 }

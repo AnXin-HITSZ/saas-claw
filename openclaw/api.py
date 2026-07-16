@@ -80,7 +80,6 @@ class AgentRunRequest(BaseModel):
     role_key: str | None = None
     agent_key: str | None = None
     sandbox_base_url: str | None = None
-    workspace_mode: Literal["local", "sandbox_runner"] = "local"
 
 
 class AgentRunResponse(BaseModel):
@@ -96,8 +95,6 @@ class ToolCatalogItem(BaseModel):
     profiles: list[str]
     tags: list[str]
     risk: str
-    workspace_only: bool
-    workspace_modes: list[str]
     readonly: bool
     requires_approval: bool
     prompt_hint: str
@@ -114,8 +111,6 @@ class ToolResolveRequest(BaseModel):
     deny: list[str] | None = None
     also_allow: list[str] | None = None
     readonly: bool = False
-    workspace_mode: Literal["local", "sandbox_runner"] = "sandbox_runner"
-    web_access: bool = False
 
 
 class ResolvedToolResponse(BaseModel):
@@ -126,8 +121,6 @@ class ResolvedToolResponse(BaseModel):
     profiles: list[str]
     tags: list[str]
     risk: str
-    workspace_only: bool
-    workspace_modes: list[str]
     readonly: bool
     requires_approval: bool
     prompt_hint: str
@@ -145,7 +138,6 @@ class PromptFragmentResponse(BaseModel):
 
 class ToolResolveResponse(BaseModel):
     profile: str
-    workspace_mode: str
     tools: list[ResolvedToolResponse]
     denied_tools: list[DeniedToolResponse]
     prompt_fragments: list[PromptFragmentResponse]
@@ -256,7 +248,6 @@ def build_policy_from_runtime(runtime_config: AgentRuntimeConfig) -> ToolPolicy:
         allow=normalize_name_set(tool_policy.allow),
         deny=normalize_name_set(tool_policy.deny) or set(),
         also_allow=normalize_name_set(tool_policy.also_allow) or set(),
-        workspace_only=tool_policy.workspace_only,
         readonly=tool_policy.readonly or profile == "readonly",
     )
 
@@ -293,8 +284,6 @@ def tools_catalog(_: None = Depends(require_api_token)) -> ToolCatalogResponse:
             profiles=list(entry.profiles),
             tags=list(entry.tags),
             risk=entry.risk,
-            workspace_only=entry.workspace_only,
-            workspace_modes=list(entry.workspace_modes),
             readonly=entry.readonly,
             requires_approval=entry.requires_approval,
             prompt_hint=entry.prompt_hint,
@@ -313,13 +302,10 @@ def tools_resolve(request: ToolResolveRequest, _: None = Depends(require_api_tok
             deny=normalize_name_set(request.deny) or set(),
             also_allow=normalize_name_set(request.also_allow) or set(),
             readonly=request.readonly,
-            workspace_mode=request.workspace_mode,
-            web_access=request.web_access,
         )
     )
     return ToolResolveResponse(
         profile=result.profile,
-        workspace_mode=result.workspace_mode,
         tools=[ResolvedToolResponse(**asdict(tool)) for tool in result.tools],
         denied_tools=[DeniedToolResponse(**asdict(tool)) for tool in result.denied_tools],
         prompt_fragments=[PromptFragmentResponse(**asdict(fragment)) for fragment in result.prompt_fragments],
@@ -406,35 +392,13 @@ def build_provider(request: AgentRunRequest, *, model: str) -> Any:
     raise ValueError(f"unsupported provider: {request.provider}")
 
 
-# Local fs tools that should be denied when using sandbox_runner workspace mode
-SANDBOX_MODE_DENY_TOOLS = {
-    "read", "list_dir", "ls", "grep", "find",
-    "write", "edit", "apply_patch", "shell", "exec",
-}
-SANDBOX_MODE_ALLOW_TOOLS = {
-    "sandbox_workspace_info", "sandbox_list_files",
-    "sandbox_read_file", "sandbox_write_file",
-    "sandbox_apply_patch",
-}
-
-
 def build_policy(request: AgentRunRequest) -> ToolPolicy:
     profile = request.tool_profile
-    deny = normalize_name_set(request.tools_deny) or set()
-    also_allow = normalize_name_set(request.tools_also_allow) or set()
-
-    if request.workspace_mode == "sandbox_runner":
-        if not request.sandbox_base_url:
-            raise HTTPException(status_code=400, detail="sandbox_base_url is required when workspace_mode=sandbox_runner")
-        # Prevent local filesystem tools from operating on the pyclaw-api pod filesystem
-        deny = deny | SANDBOX_MODE_DENY_TOOLS
-        also_allow = also_allow | SANDBOX_MODE_ALLOW_TOOLS
-
     return ToolPolicy(
         profile=profile,
         allow=normalize_name_set(request.tools_allow),
-        deny=deny,
-        also_allow=also_allow,
+        deny=normalize_name_set(request.tools_deny) or set(),
+        also_allow=normalize_name_set(request.tools_also_allow) or set(),
         readonly=profile == "readonly",
     )
 
@@ -450,8 +414,7 @@ def build_model_options(request: AgentRunRequest) -> dict[str, Any]:
 
 def build_tool_metadata(request: AgentRunRequest) -> dict[str, Any]:
     meta: dict[str, Any] = {"shell_approval_mode": request.shell_approval}
-    if request.workspace_mode == "sandbox_runner":
-        meta["workspace_mode"] = request.workspace_mode
+    if request.sandbox_base_url:
         meta["sandbox_base_url"] = request.sandbox_base_url
         meta["claw_id"] = request.claw_id
         meta["owner_user_id"] = request.owner_user_id
