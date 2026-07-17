@@ -57,7 +57,6 @@ public class ToolCatalogService {
                 entry.tags(),
                 entry.risk(),
                 entry.readonly(),
-                entry.requiresApproval(),
                 entry.promptHint()
         );
     }

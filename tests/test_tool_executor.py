@@ -5,7 +5,7 @@ from pathlib import Path
 
 from openclaw.llm.types import ToolCallBlock
 from openclaw.tools.executor import execute_tool_call, execute_tool_call_batch, make_base_context
-from openclaw.tools.hooks import ToolHookDecision
+from openclaw.tools.hooks import ToolExecutionDecision
 from openclaw.tools.registry import FunctionTool, ToolRegistry
 from openclaw.tools.results import text_result
 from openclaw.tools.types import ToolDefinition, ToolMetadata
@@ -13,7 +13,7 @@ from openclaw.tools.types import ToolDefinition, ToolMetadata
 
 class BlockingHooks:
     async def before_tool_call(self, call, tool, arguments, context):
-        return ToolHookDecision(allowed=False, reason="blocked", denied_reason="test")
+        return ToolExecutionDecision(status="DENY", reason="blocked", denied_reason="test")
 
     async def after_tool_call(self, call, tool, arguments, result, context):
         return result
@@ -23,7 +23,7 @@ class RewritingHooks:
     async def before_tool_call(self, call, tool, arguments, context):
         args = dict(arguments)
         args["value"] = "rewritten"
-        return ToolHookDecision(arguments=args)
+        return ToolExecutionDecision(status="ALLOW", arguments=args)
 
     async def after_tool_call(self, call, tool, arguments, result, context):
         return text_result(result.output() + " after", details={"hooked": True})

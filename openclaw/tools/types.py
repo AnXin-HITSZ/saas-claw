@@ -66,7 +66,6 @@ class ToolMetadata:
     plugin_id: str | None = None
     expose_to_llm: bool = True
     readonly: bool = False
-    requires_approval: bool = False
     execution_scope: ExecutionScope = "claw_sandbox"
 
 

@@ -13,7 +13,6 @@ public record PyclawToolCatalogEntry(
         List<String> tags,
         String risk,
         boolean readonly,
-        @JsonProperty("requires_approval") boolean requiresApproval,
         @JsonProperty("prompt_hint") String promptHint
 ) {
 }

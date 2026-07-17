@@ -13,7 +13,6 @@ public record ToolCatalogEntryResponse(
         List<String> tags,
         String risk,
         boolean readonly,
-        boolean requiresApproval,
         String promptHint
 ) {
 }

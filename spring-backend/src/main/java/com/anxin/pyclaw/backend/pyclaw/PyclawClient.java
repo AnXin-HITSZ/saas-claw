@@ -47,10 +47,18 @@ public class PyclawClient {
     }
 
     public PyclawAgentRunResponse runAgent(PyclawAgentRunRequest request) {
+        return postForAgentRunResponse("/v1/agent/run", request, "pyclaw call failed");
+    }
+
+    public PyclawAgentRunResponse resumeAgent(PyclawAgentResumeRequest request) {
+        return postForAgentRunResponse("/v1/agent/resume", request, "pyclaw resume call failed");
+    }
+
+    private PyclawAgentRunResponse postForAgentRunResponse(String path, Object requestBody, String failureMessage) {
         try {
-            String body = objectMapper.writeValueAsString(request);
+            String body = objectMapper.writeValueAsString(requestBody);
             HttpRequest.Builder builder = HttpRequest.newBuilder()
-                    .uri(URI.create(trimTrailingSlash(properties.baseUrl()) + "/v1/agent/run"))
+                    .uri(URI.create(trimTrailingSlash(properties.baseUrl()) + path))
                     .version(HttpClient.Version.HTTP_1_1)
                     .timeout(Duration.ofSeconds(properties.readTimeoutSeconds()))
                     .header(HttpHeaders.CONTENT_TYPE, "application/json")
@@ -58,13 +66,13 @@ public class PyclawClient {
             addInternalAuthorization(builder);
             HttpResponse<String> response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new ApiException(HttpStatus.BAD_GATEWAY, "pyclaw call failed: " + response.body());
+                throw new ApiException(HttpStatus.BAD_GATEWAY, failureMessage + ": " + response.body());
             }
             return objectMapper.readValue(response.body(), PyclawAgentRunResponse.class);
         } catch (ApiException exc) {
             throw exc;
         } catch (Exception exc) {
-            throw new ApiException(HttpStatus.BAD_GATEWAY, "pyclaw call failed: " + exc.getMessage());
+            throw new ApiException(HttpStatus.BAD_GATEWAY, failureMessage + ": " + exc.getMessage());
         }
     }
 

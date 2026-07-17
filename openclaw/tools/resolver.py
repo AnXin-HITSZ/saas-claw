@@ -28,7 +28,6 @@ class ResolvedTool:
     tags: tuple[str, ...]
     risk: str
     readonly: bool
-    requires_approval: bool
     prompt_hint: str
 
 
@@ -102,7 +101,6 @@ def to_resolved_tool(entry: ToolCatalogEntry) -> ResolvedTool:
         tags=entry.tags,
         risk=entry.risk,
         readonly=entry.readonly,
-        requires_approval=entry.requires_approval,
         prompt_hint=entry.prompt_hint,
     )
 

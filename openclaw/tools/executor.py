@@ -10,7 +10,8 @@ from typing import Any
 
 from openclaw.agent.events import AgentEvent
 from openclaw.llm.types import ToolCallBlock, ToolResultMessage, tool_result_content
-from openclaw.tools.hooks import NoopToolHooks, ToolHookDecision, ToolHooks
+from openclaw.tools.approval import PendingToolApprovalError
+from openclaw.tools.hooks import NoopToolHooks, ToolExecutionDecision, ToolHooks
 from openclaw.tools.registry import ToolRegistry, normalize_tool
 from openclaw.tools.results import blocked_result, error_result, ensure_tool_result
 from openclaw.tools.schema import ToolArgumentError, validate_tool_arguments
@@ -55,18 +56,31 @@ async def execute_tool_call(
 
     try:
         decision = await _maybe_await(hooks.before_tool_call(call, tool, arguments, context))
+    except PendingToolApprovalError:
+        raise
     except Exception as exc:
         result = error_result(str(exc), details={"status": "before_hook_failed"})
         return _outcome(call, result, tool=tool)
 
-    if not isinstance(decision, ToolHookDecision):
-        decision = ToolHookDecision(arguments=arguments)
-    if not decision.allowed:
+    if not isinstance(decision, ToolExecutionDecision):
+        decision = ToolExecutionDecision(status="ALLOW", arguments=arguments)
+
+    if decision.status == "DENY":
         result = blocked_result(
             decision.reason or f"tool call blocked: {call.name}",
             denied_reason=decision.denied_reason or decision.reason,
         )
         return _outcome(call, result, tool=tool)
+
+    if decision.status == "PENDING_APPROVAL":
+        if decision.approval is None:
+            result = error_result(
+                "internal error: PENDING_APPROVAL decision missing approval payload",
+                details={"status": "approval_missing"},
+            )
+            return _outcome(call, result, tool=tool)
+        raise PendingToolApprovalError(decision.approval)
+
     if decision.arguments is not None:
         arguments = dict(decision.arguments)
 
@@ -211,4 +225,3 @@ async def _maybe_await(value: Any) -> Any:
     if inspect.isawaitable(value):
         return await value
     return value
-

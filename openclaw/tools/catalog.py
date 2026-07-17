@@ -34,7 +34,6 @@ class ToolCatalogEntry:
     expose_to_llm: bool = True
     user_visible: bool = True
     readonly: bool = False
-    requires_approval: bool = False
     prompt_hint: str = ""
     include_in_openclaw_group: bool = False
 
@@ -140,7 +139,6 @@ def materialize_catalog_entry(entry: ToolCatalogEntry) -> ToolDefinition:
             plugin_id=entry.plugin_id,
             expose_to_llm=entry.expose_to_llm,
             readonly=entry.readonly,
-            requires_approval=entry.requires_approval,
             execution_scope=entry.execution_scope,
         ),
     )

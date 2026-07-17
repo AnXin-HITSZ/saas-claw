@@ -1,5 +1,6 @@
 package com.anxin.pyclaw.backend.clawchat;
 
+import com.anxin.pyclaw.backend.approval.ToolApprovalDecisionRequest;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -35,5 +36,25 @@ public class ClawChatController {
             @PathVariable String clawId,
             Authentication authentication) {
         return service.listSessions(clawId, authentication);
+    }
+
+    @PostMapping("/approvals/{approvalId}/approve")
+    @PreAuthorize("hasAuthority('agent:run')")
+    public ClawChatRunResponse approve(
+            @PathVariable String clawId,
+            @PathVariable String approvalId,
+            Authentication authentication) {
+        return service.approve(clawId, approvalId, authentication);
+    }
+
+    @PostMapping("/approvals/{approvalId}/reject")
+    @PreAuthorize("hasAuthority('agent:run')")
+    public ClawChatRunResponse reject(
+            @PathVariable String clawId,
+            @PathVariable String approvalId,
+            @RequestBody(required = false) ToolApprovalDecisionRequest request,
+            Authentication authentication) {
+        String reason = request == null ? null : request.reason();
+        return service.reject(clawId, approvalId, reason, authentication);
     }
 }

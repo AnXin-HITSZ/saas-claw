@@ -62,6 +62,39 @@
           </div>
         </div>
 
+        <!-- Tool approval modal -->
+        <div v-if="showApprovalModal && pendingApproval" class="approval-mask" @click.self="closeApprovalModal">
+          <div class="approval-modal">
+            <div class="approval-header">
+              <h3>需要你确认后继续执行</h3>
+              <span class="approval-risk" :class="pendingApproval.risk">{{ pendingApproval.risk }}</span>
+            </div>
+            <div class="approval-body">
+              <div class="approval-row">
+                <span class="approval-label">工具名称</span>
+                <span class="approval-value">{{ pendingApproval.toolName }}</span>
+              </div>
+              <div class="approval-row">
+                <span class="approval-label">执行意图</span>
+                <span class="approval-value">{{ pendingApproval.intent || '（未提供意图摘要）' }}</span>
+              </div>
+              <div class="approval-row">
+                <span class="approval-label">参数摘要</span>
+                <pre class="approval-args">{{ formatArgumentsPreview(pendingApproval.argumentsPreview) }}</pre>
+              </div>
+              <div class="approval-row">
+                <span class="approval-label">过期时间</span>
+                <span class="approval-value">{{ formatShort(pendingApproval.expiresAt) }}</span>
+              </div>
+              <div v-if="approvalError" class="approval-error">{{ approvalError }}</div>
+            </div>
+            <div class="approval-actions">
+              <button class="btn-secondary" :disabled="resolvingApproval" @click="rejectApproval">拒绝执行</button>
+              <button class="btn-primary" :disabled="resolvingApproval" @click="approveApproval">同意执行</button>
+            </div>
+          </div>
+        </div>
+
         <!-- Scroll anchor hint -->
         <div v-if="showScrollHint" class="scroll-hint" @click="scrollToBottom">
           ↓ 新消息
@@ -106,6 +139,10 @@ const selectedRoleKey = ref("");
 const messagesEl = ref(null);
 const inputEl = ref(null);
 const showScrollHint = ref(false);
+const pendingApproval = ref(null);
+const showApprovalModal = ref(false);
+const resolvingApproval = ref(false);
+const approvalError = ref("");
 
 const roleLabel = computed(() => {
   const r = roles.value.find(r => r.roleKey === selectedRoleKey.value);
@@ -170,16 +207,89 @@ async function sendMessage() {
       roleKey: selectedRoleKey.value || undefined,
       sessionId: activeSessionId.value || undefined,
     });
-    activeSessionId.value = res.sessionId;
-    messages.value.push({ role: "assistant", content: res.text || "(无回复)" });
-    const s = await api.get(`/api/claws/${clawId.value}/chat/sessions`);
-    sessions.value = s || [];
+    await handleChatResponse(res);
   } catch (e) {
     error.value = "发送失败: " + e.message;
   } finally {
     sending.value = false;
     await nextTick();
     scrollToBottom(true);
+  }
+}
+
+async function handleChatResponse(res) {
+  if (!res) return;
+  activeSessionId.value = res.sessionId || activeSessionId.value;
+  if (res.status === "PENDING_APPROVAL") {
+    const assistantText = res.text || "该操作需要你确认后继续执行。";
+    messages.value.push({ role: "assistant", content: assistantText });
+    pendingApproval.value = res.approval || null;
+    if (pendingApproval.value) {
+      showApprovalModal.value = true;
+    }
+  } else {
+    messages.value.push({ role: "assistant", content: res.text || "(无回复)" });
+  }
+  try {
+    const s = await api.get(`/api/claws/${clawId.value}/chat/sessions`);
+    sessions.value = s || [];
+  } catch {
+    // ignore refresh failure; main content already updated
+  }
+}
+
+async function approveApproval() {
+  if (!pendingApproval.value || resolvingApproval.value) return;
+  resolvingApproval.value = true;
+  approvalError.value = "";
+  const approvalId = pendingApproval.value.id;
+  const cid = clawId.value;
+  try {
+    const res = await api.post(`/api/claws/${cid}/chat/approvals/${approvalId}/approve`);
+    closeApprovalModal();
+    await handleChatResponse(res);
+    await nextTick();
+    scrollToBottom(true);
+  } catch (e) {
+    approvalError.value = "审批失败: " + e.message;
+  } finally {
+    resolvingApproval.value = false;
+  }
+}
+
+async function rejectApproval() {
+  if (!pendingApproval.value || resolvingApproval.value) return;
+  resolvingApproval.value = true;
+  approvalError.value = "";
+  const approvalId = pendingApproval.value.id;
+  const cid = clawId.value;
+  try {
+    const res = await api.post(`/api/claws/${cid}/chat/approvals/${approvalId}/reject`, {
+      reason: "用户在弹窗中拒绝执行该工具调用",
+    });
+    closeApprovalModal();
+    await handleChatResponse(res);
+    await nextTick();
+    scrollToBottom(true);
+  } catch (e) {
+    approvalError.value = "拒绝失败: " + e.message;
+  } finally {
+    resolvingApproval.value = false;
+  }
+}
+
+function closeApprovalModal() {
+  showApprovalModal.value = false;
+  pendingApproval.value = null;
+  approvalError.value = "";
+}
+
+function formatArgumentsPreview(preview) {
+  if (!preview) return "(无参数)";
+  try {
+    return JSON.stringify(preview, null, 2);
+  } catch {
+    return String(preview);
   }
 }
 
@@ -362,4 +472,49 @@ onMounted(load);
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .no-data { color: var(--text-muted); font-size: 12px; padding: 16px 8px; text-align: center; }
+
+/* Approval modal */
+.approval-mask {
+  position: fixed; inset: 0; background: rgba(4,7,12,0.65); backdrop-filter: blur(2px);
+  display: flex; align-items: center; justify-content: center; z-index: 20;
+  animation: fade-in-up 0.15s var(--ease-out);
+}
+.approval-modal {
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 20px 22px; width: min(560px, 92vw);
+  box-shadow: 0 12px 48px rgba(0,0,0,0.5);
+}
+.approval-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.approval-header h3 { font-size: 16px; font-weight: 700; flex: 1; }
+.approval-risk {
+  font-size: 11px; padding: 2px 8px; border-radius: 999px;
+  background: rgba(210,153,34,0.14); color: var(--warning); text-transform: lowercase;
+}
+.approval-risk.high { background: rgba(248,81,73,0.12); color: var(--danger); }
+.approval-risk.low { background: rgba(56,139,253,0.14); color: #58a6ff; }
+.approval-body { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+.approval-row { display: flex; flex-direction: column; gap: 4px; }
+.approval-label { color: var(--text-muted); font-size: 12px; font-weight: 600; letter-spacing: 0.3px; }
+.approval-value { color: var(--text-primary); font-size: 13px; word-break: break-all; }
+.approval-args {
+  background: var(--bg-deep); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 10px 12px;
+  font-size: 12px; max-height: 220px; overflow: auto;
+  white-space: pre-wrap; word-break: break-word;
+}
+.approval-error {
+  padding: 8px 12px; border-radius: var(--radius-sm); font-size: 12px;
+  color: var(--danger); background: rgba(248,81,73,0.08);
+}
+.approval-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.approval-actions .btn-primary {
+  padding: 8px 18px; font-size: 13px; font-weight: 700; color: #0a0e14;
+  background: var(--accent); border: none; border-radius: var(--radius-sm);
+}
+.approval-actions .btn-primary:disabled { opacity: 0.5; }
+.approval-actions .btn-secondary {
+  padding: 8px 18px; font-size: 13px; font-weight: 600; color: var(--text-primary);
+  background: var(--bg-deep); border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.approval-actions .btn-secondary:disabled { opacity: 0.5; }
 </style>
