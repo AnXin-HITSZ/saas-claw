@@ -82,7 +82,8 @@ class TenantIsolationTest {
         when(pyclawClient.forwardChannelWebhook(any(), any(), any(byte[].class), any(), anyMap()))
                 .thenReturn(ResponseEntity.ok("ok".getBytes()));
         when(pyclawClient.runAgent(any()))
-                .thenReturn(new com.anxin.pyclaw.backend.pyclaw.PyclawAgentRunResponse("test-session", java.util.Map.of(), "ok"));
+                .thenReturn(new com.anxin.pyclaw.backend.pyclaw.PyclawAgentRunResponse(
+                        "COMPLETED", "test-session", java.util.Map.of(), "ok", null));
 
         // Register user A
         MvcResult regA = mockMvc.perform(post("/api/auth/register")
