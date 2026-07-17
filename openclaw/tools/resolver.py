@@ -130,9 +130,9 @@ def build_prompt_fragments(tools: list[ResolvedTool]) -> list[PromptFragment]:
     claw_workspace_tools = by_scope.get("claw_sandbox", [])
     if claw_workspace_tools:
         lines = [
-            "The current workspace is the current Claw's dedicated sandbox.",
-            "Use only the currently available tools to inspect or modify resources in this workspace.",
-            "Current available tools:",
+            "当前工作区是当前 Claw 专属的沙箱工作区。",
+            "你只能使用当前可用工具检查或修改该工作区内的资源。",
+            "当前可用工具：",
         ]
         lines.extend(f"- {tool.name}: {tool.prompt_hint or tool.description}" for tool in claw_workspace_tools)
         fragments.append(PromptFragment(key="claw_workspace", content="\n".join(lines)))

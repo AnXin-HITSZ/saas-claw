@@ -26,7 +26,7 @@ class ToolCatalogTests(unittest.TestCase):
         self.assertFalse(any(name.startswith("sandbox" + "_") for name in names))
         self.assertGreaterEqual(len(result.prompt_fragments), 1)
         prompt = "\n".join(fragment.content for fragment in result.prompt_fragments)
-        self.assertIn("Current available tools:", prompt)
+        self.assertIn("当前可用工具：", prompt)
         self.assertIn("read_file", prompt)
         self.assertNotIn("sandbox" + "_", prompt)
 

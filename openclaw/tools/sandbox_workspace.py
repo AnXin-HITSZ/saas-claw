@@ -76,8 +76,8 @@ def create_workspace_info_tool() -> ToolDefinition:
 
     return ToolDefinition(
         name="workspace_info",
-        label="Workspace Info",
-        description="Get information about the current Claw workspace.",
+        label="工作区信息",
+        description="获取当前 Claw 工作区的信息。",
         input_schema={
             "type": "object",
             "properties": {},
@@ -98,12 +98,12 @@ def create_list_files_tool() -> ToolDefinition:
 
     return ToolDefinition(
         name="list_files",
-        label="List Files",
-        description="List files and directories in the current Claw workspace. Use path='.' for root.",
+        label="列出文件",
+        description="列出当前 Claw 工作区中的文件和目录。使用 path='.' 表示根目录。",
         input_schema={
             "type": "object",
             "properties": {
-                "path": {"type": "string", "description": "Directory path relative to workspace root."},
+                "path": {"type": "string", "description": "相对于工作区根目录的目录路径。"},
             },
             "required": [],
         },
@@ -122,12 +122,12 @@ def create_read_file_tool() -> ToolDefinition:
 
     return ToolDefinition(
         name="read_file",
-        label="Read File",
-        description="Read a UTF-8 text file from the current Claw workspace.",
+        label="读取文件",
+        description="读取当前 Claw 工作区中的 UTF-8 文本文件。",
         input_schema={
             "type": "object",
             "properties": {
-                "file_path": {"type": "string", "description": "File path relative to workspace root."},
+                "file_path": {"type": "string", "description": "相对于工作区根目录的文件路径。"},
             },
             "required": ["file_path"],
         },
@@ -149,13 +149,13 @@ def create_write_file_tool() -> ToolDefinition:
 
     return ToolDefinition(
         name="write_file",
-        label="Write File",
-        description="Write UTF-8 text content to a file in the current Claw workspace.",
+        label="写入文件",
+        description="向当前 Claw 工作区中的文件写入 UTF-8 文本内容。",
         input_schema={
             "type": "object",
             "properties": {
-                "file_path": {"type": "string", "description": "File path relative to workspace root."},
-                "content": {"type": "string", "description": "UTF-8 text content to write."},
+                "file_path": {"type": "string", "description": "相对于工作区根目录的文件路径。"},
+                "content": {"type": "string", "description": "要写入的 UTF-8 文本内容。"},
             },
             "required": ["file_path", "content"],
         },
@@ -179,15 +179,15 @@ def create_apply_patch_tool() -> ToolDefinition:
 
     return ToolDefinition(
         name="apply_patch",
-        label="Apply Patch",
-        description="Apply an exact-text replacement patch to a file in the current Claw workspace.",
+        label="应用补丁",
+        description="对当前 Claw 工作区中的文件应用精确文本替换补丁。",
         input_schema={
             "type": "object",
             "properties": {
-                "file_path": {"type": "string", "description": "File path relative to workspace root."},
-                "old_text": {"type": "string", "description": "Exact text to replace."},
-                "new_text": {"type": "string", "description": "Replacement text."},
-                "replace_all": {"type": "boolean", "description": "Replace all occurrences instead of exactly one."},
+                "file_path": {"type": "string", "description": "相对于工作区根目录的文件路径。"},
+                "old_text": {"type": "string", "description": "需要替换的精确原文。"},
+                "new_text": {"type": "string", "description": "替换后的新文本。"},
+                "replace_all": {"type": "boolean", "description": "是否替换全部匹配项，而不是只替换唯一一次出现。"},
             },
             "required": ["file_path", "old_text", "new_text"],
         },
