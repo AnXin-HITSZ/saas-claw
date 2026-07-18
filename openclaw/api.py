@@ -303,7 +303,7 @@ def build_policy_from_runtime(runtime_config: AgentRuntimeConfig) -> ToolPolicy:
     profile = tool_policy.profile
     return ToolPolicy(
         profile=profile,  # type: ignore[arg-type]
-        allow=normalize_name_set(tool_policy.allow),
+        allow=normalize_allow_name_set(tool_policy.allow),
         deny=normalize_name_set(tool_policy.deny) or set(),
         also_allow=normalize_name_set(tool_policy.also_allow) or set(),
         readonly=tool_policy.readonly or profile == "readonly",
@@ -356,7 +356,7 @@ def tools_resolve(request: ToolResolveRequest, _: None = Depends(require_api_tok
     result = resolve_tools(
         ToolResolveInput(
             profile=request.profile,
-            allow=normalize_name_set(request.allow),
+            allow=normalize_allow_name_set(request.allow),
             deny=normalize_name_set(request.deny) or set(),
             also_allow=normalize_name_set(request.also_allow) or set(),
             readonly=request.readonly,
@@ -796,7 +796,7 @@ def build_policy(request: AgentRunRequest) -> ToolPolicy:
     profile = request.tool_profile
     return ToolPolicy(
         profile=profile,
-        allow=normalize_name_set(request.tools_allow),
+        allow=normalize_allow_name_set(request.tools_allow),
         deny=normalize_name_set(request.tools_deny) or set(),
         also_allow=normalize_name_set(request.tools_also_allow) or set(),
         readonly=profile == "readonly",
@@ -912,6 +912,11 @@ def normalize_name_set(values: list[str] | None) -> set[str] | None:
         return None
     names = {value.strip() for value in values if value.strip()}
     return names
+
+
+def normalize_allow_name_set(values: list[str] | None) -> set[str] | None:
+    names = normalize_name_set(values)
+    return names or None
 
 
 def normalize_api_mode(value: str) -> str:

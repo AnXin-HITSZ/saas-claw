@@ -139,6 +139,39 @@ class ApiTests(unittest.TestCase):
         self.assertIn("read_file", output)
         self.assertIn("tools_deny=['shell']", output)
 
+    def test_empty_tools_allow_uses_profile_defaults(self) -> None:
+        from openclaw.api import AgentRunRequest, build_policy, resolve_runtime_tools
+
+        request = AgentRunRequest(
+            prompt="hello",
+            provider="mock",
+            model="mock-model",
+            tool_profile="full",
+            tools_allow=[],
+            sandbox_base_url="http://sandbox.local",
+        )
+
+        policy = build_policy(request)
+        resolved_tools = resolve_runtime_tools(policy)
+
+        self.assertIsNone(policy.allow)
+        self.assertIn("workspace_info", [tool.name for tool in resolved_tools.tools])
+        self.assertIn("read_file", [tool.name for tool in resolved_tools.tools])
+
+    def test_tools_resolve_empty_allow_uses_profile_defaults(self) -> None:
+        response = self.client.post(
+            "/v1/tools/resolve",
+            json={
+                "profile": "full",
+                "allow": [],
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        tool_names = [tool["name"] for tool in response.json()["tools"]]
+        self.assertIn("workspace_info", tool_names)
+        self.assertIn("read_file", tool_names)
+
 
 if __name__ == "__main__":
     unittest.main()
