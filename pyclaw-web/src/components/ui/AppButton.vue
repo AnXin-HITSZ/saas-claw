@@ -4,6 +4,7 @@
     :class="`variant-${variant}`"
     :type="type"
     :disabled="disabled || loading"
+    :aria-busy="loading || undefined"
     @click="$emit('click', $event)"
   >
     <AppSpinner v-if="loading" size="sm" class="btn-spinner" />

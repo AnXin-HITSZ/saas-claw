@@ -512,10 +512,6 @@ function goDetail(id) {
   router.push(`/workspace/claws/${id}`);
 }
 
-function statusClass(status) {
-  return (status || "active").toLowerCase();
-}
-
 onMounted(load);
 </script>
 
