@@ -1,20 +1,23 @@
 <template>
   <div class="claw-page">
-    <div class="breadcrumb">工作台 <span>›</span> Claw 管理</div>
+    <PageHeader title="Claw 管理" subtitle="每个 Claw 是一个独立工作区，包含多个 Agent 角色。">
+      <template #actions>
+        <AppButton variant="primary" @click="openCreate">+ 新建 Claw</AppButton>
+      </template>
+    </PageHeader>
 
-    <header class="hero-row">
-      <div>
-        <h1>Claw 管理</h1>
-        <p>每个 Claw 是一个独立工作区，包含多个 Agent 角色。</p>
+    <div v-if="loading" class="claw-skeletons">
+      <div class="stat-row">
+        <AppSkeleton v-for="i in 4" :key="i" variant="rect" :height="86" />
       </div>
-      <button class="btn-primary add-button" type="button" @click="openCreate">+ 新建 Claw</button>
-    </header>
-
-    <div v-if="loading" class="loading-panel">
-      <div class="skeleton title"></div>
-      <div class="skeleton line"></div>
+      <div class="claw-grid">
+        <AppSkeleton v-for="i in 3" :key="i" variant="rect" :height="260" />
+      </div>
     </div>
-    <div v-else-if="error" class="error-msg">{{ error }}</div>
+    <div v-else-if="error" class="error-panel">
+      <p class="error-msg">{{ error }}</p>
+      <AppButton variant="ghost" @click="load">重试</AppButton>
+    </div>
 
     <template v-else>
       <section class="guide-band" aria-label="开始使用 PyClaw">
@@ -32,22 +35,22 @@
         </div>
       </section>
 
-      <section class="metric-grid" aria-label="Claw 概览">
-        <div class="metric-card accent">
-          <strong>{{ claws.length }}</strong>
-          <span>CLAW 总数</span>
+      <section class="stat-row" aria-label="Claw 概览">
+        <div class="stat-card accent">
+          <div class="stat-value">{{ claws.length }}</div>
+          <div class="stat-label">CLAW 总数</div>
         </div>
-        <div class="metric-card success">
-          <strong>{{ activeCount }}</strong>
-          <span>运行中</span>
+        <div class="stat-card success">
+          <div class="stat-value">{{ activeCount }}</div>
+          <div class="stat-label">运行中</div>
         </div>
-        <div class="metric-card agent">
-          <strong>{{ roleCount }}</strong>
-          <span>AGENT 角色</span>
+        <div class="stat-card">
+          <div class="stat-value agent-value">{{ roleCount }}</div>
+          <div class="stat-label">AGENT 角色</div>
         </div>
-        <div class="metric-card feishu">
-          <strong>{{ feishuCount }}</strong>
-          <span>飞书已绑定</span>
+        <div class="stat-card">
+          <div class="stat-value feishu-value">{{ feishuCount }}</div>
+          <div class="stat-label">飞书已绑定</div>
         </div>
       </section>
 
@@ -67,7 +70,9 @@
                 <p>{{ claw.description || 'Claw 实例' }}</p>
               </div>
             </div>
-            <span class="status-pill" :class="statusClass(claw.status)">{{ claw.status || 'active' }}</span>
+            <AppTag :tone="statusTone(claw.status)" :pulse="(claw.status || 'active') === 'active'">
+              {{ claw.status || 'active' }}
+            </AppTag>
           </div>
 
           <div class="role-summary">
@@ -86,11 +91,12 @@
                 <button
                   class="role-delete"
                   type="button"
-                  title="删除角色"
+                  :disabled="deletingId === roleDeleteKey(claw, role)"
+                  :title="deletingId === roleDeleteKey(claw, role) ? '删除中...' : '删除角色'"
                   aria-label="删除角色"
                   @click.stop="handleDeleteRole(claw, role)"
                 >
-                  删除
+                  {{ deletingId === roleDeleteKey(claw, role) ? '删除中...' : '删除' }}
                 </button>
               </div>
               <button class="add-more-role" type="button" @click.stop="openAddRole(claw)">+ 添加更多角色</button>
@@ -104,122 +110,122 @@
           </div>
 
           <div class="claw-card-footer" @click.stop>
-            <button class="text-button danger" type="button" @click="handleDelete(claw)">删除</button>
+            <AppButton
+              variant="danger"
+              :loading="deletingId === claw.id"
+              loading-text="删除中..."
+              @click="handleDelete(claw)"
+            >
+              删除
+            </AppButton>
             <button class="text-button enter" type="button" @click="goDetail(claw.id)">进入 Claw ›</button>
           </div>
         </article>
       </section>
 
-      <section v-else class="empty-state">
-        <div class="empty-state-icon">＋</div>
-        <h3>还没有 Claw</h3>
-        <p>创建你的第一个 Claw，然后为它添加默认 Agent 和独立沙箱工作区。</p>
-        <button class="btn-primary" type="button" @click="openCreate">+ 创建第一个 Claw</button>
+      <section v-else class="empty-state-wrap">
+        <AppEmpty icon="＋" title="还没有 Claw" description="创建你的第一个 Claw，然后为它添加默认 Agent 和独立沙箱工作区。">
+          <AppButton variant="primary" @click="openCreate">+ 创建第一个 Claw</AppButton>
+        </AppEmpty>
       </section>
     </template>
 
-    <div v-if="showCreate" class="modal-overlay" @click.self="closeCreate">
-      <div class="modal claw-modal">
-        <h2>新建 Claw</h2>
-        <form @submit.prevent="handleCreate">
-          <div class="form-group">
-            <label>名称 *</label>
-            <input v-model="createForm.name" required placeholder="我的 Claw" />
-          </div>
+    <AppModal :show="showCreate" title="新建 Claw" @close="closeCreate">
+      <form @submit.prevent="handleCreate">
+        <div class="form-group">
+          <label>名称 *</label>
+          <input v-model="createForm.name" required placeholder="我的 Claw" />
+        </div>
 
-          <div class="form-group">
-            <label>描述</label>
-            <textarea v-model="createForm.description" rows="3" placeholder="可选描述这个 Claw 的用途" />
-          </div>
+        <div class="form-group">
+          <label>描述</label>
+          <textarea v-model="createForm.description" rows="3" placeholder="可选描述这个 Claw 的用途" />
+        </div>
 
-          <div class="form-group">
-            <label>默认 Agent</label>
-            <select v-model="createForm.defaultAgentId">
-              <option value="">不选择</option>
-              <option v-for="agent in agents" :key="agent.id" :value="agent.id">
-                {{ agent.name }} ({{ agent.agentKey }})
-              </option>
-            </select>
-            <p v-if="createForm.defaultAgentId" class="field-hint">该 Agent 会自动作为新 Claw 的第一个默认角色。</p>
-          </div>
+        <div class="form-group">
+          <label>默认 Agent</label>
+          <select v-model="createForm.defaultAgentId">
+            <option value="">不选择</option>
+            <option v-for="agent in agents" :key="agent.id" :value="agent.id">
+              {{ agent.name }} ({{ agent.agentKey }})
+            </option>
+          </select>
+          <p v-if="createForm.defaultAgentId" class="field-hint">该 Agent 会自动作为新 Claw 的第一个默认角色。</p>
+        </div>
 
+        <label class="switch-line">
+          <span class="switch-label">启用飞书</span>
+          <input class="switch-input" type="checkbox" v-model="createForm.feishuEnabled" />
+          <span class="switch-track"></span>
+        </label>
+
+        <div v-if="createForm.feishuEnabled" class="form-group">
+          <label>飞书 Peer ID</label>
+          <input v-model="createForm.feishuPeerId" placeholder="群聊 ID 或用户 ID" />
+        </div>
+
+        <div class="modal-actions">
+          <AppButton variant="ghost" type="button" @click="closeCreate">取消</AppButton>
+          <AppButton variant="primary" type="submit" :loading="submitting" loading-text="创建中...">创建</AppButton>
+        </div>
+      </form>
+    </AppModal>
+
+    <AppModal :show="showAddRole" title="添加 Agent 角色" @close="closeAddRole">
+      <p class="modal-subtitle">为 <strong>{{ selectedClaw?.name }}</strong> 添加可路由的 Agent 角色。</p>
+      <form @submit.prevent="handleAddRole">
+        <div class="form-group">
+          <label>Agent *</label>
+          <select v-model="roleForm.agentId" required @change="syncSelectedAgent">
+            <option value="">请选择 Agent</option>
+            <option v-for="agent in agents" :key="agent.id" :value="agent.id">
+              {{ agent.name }} ({{ agent.agentKey }})
+            </option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="label-with-help">
+            <span>角色 Key *</span>
+            <span
+              class="help-dot"
+              tabindex="0"
+              role="img"
+              aria-label="角色 Key 是这个 Agent 在当前 Claw 里的路由身份，例如 default、frontend 或 ops。"
+              data-tooltip="当前 Claw 内的路由身份。它定义“在这个 Claw 里怎么调用该 Agent”，可与 Mention Aliases 和 Command Prefixes 配合使用。"
+            >?</span>
+          </label>
+          <input v-model="roleForm.roleKey" required placeholder="default / frontend / ops" />
+        </div>
+        <div class="form-group">
+          <label>展示名称 *</label>
+          <input v-model="roleForm.displayName" required placeholder="前端 Agent" />
+        </div>
+        <div class="form-group">
+          <label>Mention Aliases</label>
+          <input v-model="roleForm.mentionAliases" placeholder="前端, frontend" />
+        </div>
+        <div class="form-group">
+          <label>Command Prefixes</label>
+          <input v-model="roleForm.commandPrefixes" placeholder="/frontend, /fe" />
+        </div>
+        <div class="switch-grid">
           <label class="switch-line">
-            <span class="switch-label">启用飞书</span>
-            <input class="switch-input" type="checkbox" v-model="createForm.feishuEnabled" />
+            <span class="switch-label">设为默认角色</span>
+            <input class="switch-input" type="checkbox" v-model="roleForm.defaultRole" />
             <span class="switch-track"></span>
           </label>
-
-          <div v-if="createForm.feishuEnabled" class="form-group">
-            <label>飞书 Peer ID</label>
-            <input v-model="createForm.feishuPeerId" placeholder="群聊 ID 或用户 ID" />
-          </div>
-
-          <div class="modal-actions">
-            <button type="button" class="btn-secondary" @click="closeCreate">取消</button>
-            <button type="submit" class="btn-primary">创建</button>
-          </div>
-        </form>
-      </div>
-    </div>
-
-    <div v-if="showAddRole" class="modal-overlay" @click.self="closeAddRole">
-      <div class="modal role-modal">
-        <h2>添加 Agent 角色</h2>
-        <p class="modal-subtitle">为 <strong>{{ selectedClaw?.name }}</strong> 添加可路由的 Agent 角色。</p>
-        <form @submit.prevent="handleAddRole">
-          <div class="form-group">
-            <label>Agent *</label>
-            <select v-model="roleForm.agentId" required @change="syncSelectedAgent">
-              <option value="">请选择 Agent</option>
-              <option v-for="agent in agents" :key="agent.id" :value="agent.id">
-                {{ agent.name }} ({{ agent.agentKey }})
-              </option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="label-with-help">
-              <span>角色 Key *</span>
-              <span
-                class="help-dot"
-                tabindex="0"
-                role="img"
-                aria-label="角色 Key 是这个 Agent 在当前 Claw 里的路由身份，例如 default、frontend 或 ops。"
-                data-tooltip="当前 Claw 内的路由身份。它定义“在这个 Claw 里怎么调用该 Agent”，可与 Mention Aliases 和 Command Prefixes 配合使用。"
-              >?</span>
-            </label>
-            <input v-model="roleForm.roleKey" required placeholder="default / frontend / ops" />
-          </div>
-          <div class="form-group">
-            <label>展示名称 *</label>
-            <input v-model="roleForm.displayName" required placeholder="前端 Agent" />
-          </div>
-          <div class="form-group">
-            <label>Mention Aliases</label>
-            <input v-model="roleForm.mentionAliases" placeholder="前端, frontend" />
-          </div>
-          <div class="form-group">
-            <label>Command Prefixes</label>
-            <input v-model="roleForm.commandPrefixes" placeholder="/frontend, /fe" />
-          </div>
-          <div class="switch-grid">
-            <label class="switch-line">
-              <span class="switch-label">设为默认角色</span>
-              <input class="switch-input" type="checkbox" v-model="roleForm.defaultRole" />
-              <span class="switch-track"></span>
-            </label>
-            <label class="switch-line">
-              <span class="switch-label">启用</span>
-              <input class="switch-input" type="checkbox" v-model="roleForm.enabled" />
-              <span class="switch-track"></span>
-            </label>
-          </div>
-          <div class="modal-actions">
-            <button type="button" class="btn-secondary" @click="closeAddRole">取消</button>
-            <button type="submit" class="btn-primary" :disabled="!agents.length">添加</button>
-          </div>
-        </form>
-      </div>
-    </div>
+          <label class="switch-line">
+            <span class="switch-label">启用</span>
+            <input class="switch-input" type="checkbox" v-model="roleForm.enabled" />
+            <span class="switch-track"></span>
+          </label>
+        </div>
+        <div class="modal-actions">
+          <AppButton variant="ghost" type="button" @click="closeAddRole">取消</AppButton>
+          <AppButton variant="primary" type="submit" :loading="submitting" :disabled="!agents.length" loading-text="添加中...">添加</AppButton>
+        </div>
+      </form>
+    </AppModal>
   </div>
 </template>
 
@@ -227,7 +233,15 @@
 import { computed, ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { api } from "../api/client.js";
+import { useToast } from "../composables/useToast.js";
+import AppButton from "../components/ui/AppButton.vue";
+import AppSkeleton from "../components/ui/AppSkeleton.vue";
+import AppTag from "../components/ui/AppTag.vue";
+import AppEmpty from "../components/ui/AppEmpty.vue";
+import AppModal from "../components/ui/AppModal.vue";
+import PageHeader from "../components/ui/PageHeader.vue";
 
+const { toast } = useToast();
 const router = useRouter();
 const claws = ref([]);
 const agents = ref([]);
@@ -238,6 +252,8 @@ const showAddRole = ref(false);
 const selectedClaw = ref(null);
 const createForm = ref(emptyCreateForm());
 const roleForm = ref(emptyRoleForm());
+const submitting = ref(false);
+const deletingId = ref(null);
 
 const activeCount = computed(() => claws.value.filter(claw => (claw.status || "active") === "active").length);
 const roleCount = computed(() => claws.value.reduce((sum, claw) => sum + (claw.roles?.length || 0), 0));
@@ -372,7 +388,20 @@ function clawUpdatePayload(claw, roles, defaultAgentId = claw.defaultAgentId) {
   };
 }
 
+function statusTone(status) {
+  const value = (status || "active").toLowerCase();
+  if (value === "active") return "success";
+  if (value === "inactive" || value === "disabled") return "danger";
+  return "neutral";
+}
+
+function roleDeleteKey(claw, role) {
+  return `${claw.id}:${role.id || role.roleKey}`;
+}
+
 async function handleCreate() {
+  if (submitting.value) return;
+  submitting.value = true;
   try {
     const selectedAgent = agents.value.find(agent => agent.id === createForm.value.defaultAgentId);
     const roles = selectedAgent ? [{
@@ -396,20 +425,25 @@ async function handleCreate() {
     });
     showCreate.value = false;
     createForm.value = emptyCreateForm();
+    toast.success("已创建");
     await load();
   } catch (e) {
-    alert("创建失败: " + e.message);
+    toast.error("创建失败: " + e.message);
+  } finally {
+    submitting.value = false;
   }
 }
 
 async function handleAddRole() {
   if (!selectedClaw.value) return;
+  if (submitting.value) return;
   const selectedAgent = agents.value.find(agent => agent.id === roleForm.value.agentId);
   if (!selectedAgent) {
-    alert("请先选择 Agent");
+    toast.error("请先选择 Agent");
     return;
   }
 
+  submitting.value = true;
   const existingRoles = existingRoleRequests(selectedClaw.value);
   const newRole = {
     agentId: selectedAgent.id,
@@ -429,34 +463,48 @@ async function handleAddRole() {
   try {
     await api.put(`/api/claws/${selectedClaw.value.id}`, clawUpdatePayload(selectedClaw.value, roles, defaultAgentId));
     closeAddRole();
+    toast.success("已添加角色");
     await load();
   } catch (e) {
-    alert("添加角色失败: " + e.message);
+    toast.error("添加角色失败: " + e.message);
+  } finally {
+    submitting.value = false;
   }
 }
 
 async function handleDeleteRole(claw, role) {
   const roleName = role.displayName || role.agentName || role.roleKey;
   if (!confirm(`确定删除角色 "${roleName}"？`)) return;
+  if (deletingId.value) return;
 
+  const key = roleDeleteKey(claw, role);
+  deletingId.value = key;
   const roles = ensureDefaultRole(existingRoleRequests(claw).filter(item => !roleMatches(item, role)));
   const defaultAgentId = defaultAgentIdFromRoles(roles, roles.length ? roles[0].agentId : claw.defaultAgentId);
 
   try {
     await api.put(`/api/claws/${claw.id}`, clawUpdatePayload(claw, roles, defaultAgentId));
+    toast.success("已删除");
     await load();
   } catch (e) {
-    alert("删除角色失败: " + e.message);
+    toast.error("删除角色失败: " + e.message);
+  } finally {
+    if (deletingId.value === key) deletingId.value = null;
   }
 }
 
 async function handleDelete(claw) {
   if (!confirm(`确定删除 Claw "${claw.name}"？此操作不可撤销。`)) return;
+  if (deletingId.value) return;
+  deletingId.value = claw.id;
   try {
     await api.delete(`/api/claws/${claw.id}`);
+    toast.success("已删除");
     await load();
   } catch (e) {
-    alert("删除失败: " + e.message);
+    toast.error("删除失败: " + e.message);
+  } finally {
+    if (deletingId.value === claw.id) deletingId.value = null;
   }
 }
 
@@ -476,46 +524,6 @@ onMounted(load);
   width: 100%;
 }
 
-.breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 28px;
-  color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.breadcrumb span,
-.breadcrumb::first-letter {
-  color: var(--accent);
-}
-
-.hero-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-  margin-bottom: 24px;
-}
-
-.hero-row h1 {
-  margin: 0;
-  font-size: 22px;
-  line-height: 1.2;
-  letter-spacing: 0;
-}
-
-.hero-row p {
-  margin-top: 6px;
-  color: var(--text-muted);
-  font-size: 13px;
-}
-
-.add-button {
-  min-width: 112px;
-}
-
 .guide-band {
   min-height: 96px;
   display: grid;
@@ -525,8 +533,11 @@ onMounted(load);
   margin-bottom: 22px;
   padding: 17px 42px 18px 18px;
   border: 1px solid rgba(198, 123, 16, 0.58);
+  border-left: 3px solid rgba(255, 176, 0, 0.85);
   border-radius: 12px;
   background: linear-gradient(180deg, rgba(34, 24, 12, 0.86), rgba(25, 18, 10, 0.82));
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   box-shadow: inset 0 1px 0 rgba(255, 181, 65, 0.06);
 }
 
@@ -597,47 +608,19 @@ onMounted(load);
   line-height: 1;
 }
 
-.metric-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 18px;
-}
+.agent-value { color: var(--accent-3); }
+.feishu-value { color: var(--accent-2); }
 
-.metric-card {
-  min-height: 76px;
-  padding: 14px 16px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: rgba(17, 22, 29, 0.86);
+.claw-skeletons {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
-
-.metric-card strong {
-  display: block;
-  font-size: 27px;
-  line-height: 1;
-  font-weight: 900;
-  letter-spacing: 0;
-}
-
-.metric-card span {
-  display: block;
-  margin-top: 10px;
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.metric-card.accent strong { color: var(--accent); }
-.metric-card.success strong { color: var(--success); }
-.metric-card.agent strong { color: #7287ff; }
-.metric-card.feishu strong { color: #58a6ff; }
 
 .claw-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 18px;
 }
 
 .claw-card {
@@ -645,14 +628,35 @@ onMounted(load);
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  background: rgba(17, 22, 29, 0.9);
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 40%), var(--bg-surface);
+  box-shadow: var(--shadow-sm);
   cursor: pointer;
-  transition: border-color 0.2s var(--ease-out);
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.22s var(--ease-out), transform 0.22s var(--ease-out), box-shadow 0.22s var(--ease-out);
+}
+
+.claw-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 14px;
+  right: 14px;
+  height: 1px;
+  background: var(--gradient-aurora);
+  opacity: 0;
+  transition: opacity 0.3s var(--ease-out);
 }
 
 .claw-card:hover {
   border-color: var(--border-light);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow), 0 0 24px rgba(245, 168, 61, 0.08);
+}
+
+.claw-card:hover::before {
+  opacity: 0.7;
 }
 
 .claw-card-top {
@@ -698,22 +702,6 @@ onMounted(load);
   white-space: nowrap;
 }
 
-.status-pill {
-  align-self: flex-start;
-  padding: 2px 8px;
-  border-radius: 999px;
-  color: var(--success);
-  background: rgba(63, 185, 80, 0.13);
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.status-pill.inactive,
-.status-pill.disabled {
-  color: var(--danger);
-  background: rgba(248, 81, 73, 0.12);
-}
-
 .role-summary {
   padding: 0 16px 12px;
   flex: 1;
@@ -744,8 +732,14 @@ onMounted(load);
   min-height: 46px;
   padding: 8px 10px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.03);
+  transition: background 0.18s var(--ease-out), border-color 0.18s var(--ease-out);
+}
+
+.role-card:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-light);
 }
 
 .role-dot {
@@ -789,13 +783,19 @@ onMounted(load);
   font-size: 11px;
   font-weight: 700;
   opacity: 0.72;
+  cursor: pointer;
   transition: color 0.18s var(--ease-out), background 0.18s var(--ease-out), opacity 0.18s var(--ease-out);
 }
 
-.role-delete:hover {
+.role-delete:hover:not(:disabled) {
   color: var(--danger);
   background: rgba(248, 81, 73, 0.1);
   opacity: 1;
+}
+
+.role-delete:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .add-more-role {
@@ -807,6 +807,7 @@ onMounted(load);
   background: transparent;
   font-size: 12px;
   font-weight: 700;
+  cursor: pointer;
 }
 
 .add-more-role:hover {
@@ -824,6 +825,7 @@ onMounted(load);
   color: var(--text-muted);
   background: rgba(255, 255, 255, 0.015);
   text-align: center;
+  cursor: pointer;
   transition: border-color 0.18s var(--ease-out), background 0.18s var(--ease-out), color 0.18s var(--ease-out);
 }
 
@@ -870,6 +872,7 @@ onMounted(load);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 10px;
   padding: 10px 16px;
   border-top: 1px solid var(--border);
 }
@@ -880,26 +883,26 @@ onMounted(load);
   background: transparent;
   font-size: 12px;
   font-weight: 800;
+  cursor: pointer;
 }
 
-.text-button.danger { color: var(--text-muted); }
-.text-button.danger:hover { color: var(--danger); }
 .text-button.enter { color: var(--accent); }
 .text-button.enter:hover { color: var(--accent-soft); }
 
-.loading-panel {
-  padding: 24px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-surface);
+.error-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 48px 24px;
 }
 
-.loading-panel .title { width: 180px; height: 22px; margin-bottom: 16px; }
-.loading-panel .line { width: 70%; height: 14px; }
+.error-panel .error-msg {
+  margin: 0;
+}
 
-.claw-modal,
-.role-modal {
-  width: 480px;
+.empty-state-wrap {
+  margin-top: 24px;
 }
 
 .modal-subtitle {
@@ -985,29 +988,7 @@ onMounted(load);
   margin: 0;
 }
 
-.empty-state {
-  margin-top: 24px;
-  padding: 58px 24px;
-  border: 1px dashed var(--border-light);
-  border-radius: 8px;
-  background: rgba(17, 22, 29, 0.62);
-}
-
-@media (max-width: 900px) {
-  .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-
 @media (max-width: 640px) {
-  .hero-row {
-    display: grid;
-  }
-  .add-button {
-    width: 100%;
-  }
-  .guide-band {
-    grid-template-columns: 1fr;
-  }
-  .metric-grid,
   .claw-grid,
   .switch-grid {
     grid-template-columns: 1fr;
