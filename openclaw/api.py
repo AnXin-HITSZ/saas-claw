@@ -66,6 +66,7 @@ ApiMode = Literal["auto", "responses", "chat_completions", "chat-completions"]
 ToolProfileName = Literal["minimal", "readonly", "coding", "messaging", "full"]
 
 LOGGER = logging.getLogger(__name__)
+_API_LOGGING_CONFIGURED = False
 
 
 class HealthResponse(BaseModel):
@@ -175,6 +176,31 @@ class ToolResolveResponse(BaseModel):
     tools: list[ResolvedToolResponse]
     denied_tools: list[DeniedToolResponse]
     prompt_fragments: list[PromptFragmentResponse]
+
+def configure_api_logging(level_name: str | None = None) -> None:
+    global _API_LOGGING_CONFIGURED
+    if _API_LOGGING_CONFIGURED:
+        return
+
+    configured_level = level_name or os.environ.get("OPENCLAW_API_LOG_LEVEL", "INFO")
+    level = getattr(logging, configured_level.upper(), logging.INFO)
+    app_logger = logging.getLogger("openclaw")
+    app_logger.setLevel(level)
+
+    uvicorn_error_logger = logging.getLogger("uvicorn.error")
+    if uvicorn_error_logger.handlers:
+        app_logger.handlers = list(uvicorn_error_logger.handlers)
+        app_logger.propagate = False
+    elif not logging.getLogger().handlers:
+        logging.basicConfig(
+            level=level,
+            format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        )
+
+    _API_LOGGING_CONFIGURED = True
+
+
+configure_api_logging()
 
 app = FastAPI(title="pyclaw API", version="0.1.0")
 
