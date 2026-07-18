@@ -87,8 +87,9 @@
             />
           </div>
           <div class="form-group">
-            <label>Model（可选，覆盖 Provider 默认）</label>
+            <label>Model（可选）</label>
             <input v-model="form.model" placeholder="如 deepseek-chat" />
+            <p class="field-hint">留空则用 Provider 默认模型；填写则覆盖。</p>
           </div>
         </div>
         <div class="form-group">
@@ -103,22 +104,17 @@
               :options="[{value:'minimal',label:'minimal'},{value:'readonly',label:'readonly'},{value:'coding',label:'coding'},{value:'messaging',label:'messaging'},{value:'full',label:'full'}]"
             />
           </div>
-        </div>
-        <div class="form-row">
           <div class="form-group">
             <label>工作目录</label>
             <input v-model="form.workspaceDir" placeholder="/workspace" />
           </div>
-          <div class="form-group"></div>
         </div>
-        <div class="form-row single-switch-row">
-          <div class="form-group switch-field">
-            <label class="switch-line">
-              <span class="switch-label">启用</span>
-              <input class="switch-input" type="checkbox" v-model="form.enabled" />
-              <span class="switch-track"></span>
-            </label>
-          </div>
+        <div class="form-group switch-field">
+          <label class="switch-line">
+            <span class="switch-label">启用</span>
+            <input class="switch-input" type="checkbox" v-model="form.enabled" />
+            <span class="switch-track"></span>
+          </label>
         </div>
         <div class="modal-actions">
           <AppButton variant="ghost" type="button" @click="showModal = false">取消</AppButton>
@@ -255,7 +251,7 @@ onMounted(load);
 .agent-card {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
   animation: card-in 0.4s var(--ease-out) both;
 }
 @keyframes card-in {
@@ -267,12 +263,13 @@ onMounted(load);
 .agent-header h3 { font-size: 16px; margin: 0; }
 .agent-key { font-family: var(--font-mono); font-size: 12px; color: var(--accent); margin: 0; }
 .agent-desc { font-size: 13px; color: var(--text-secondary); margin: 0; }
-.agent-detail { display: flex; flex-wrap: wrap; gap: 16px; font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+.agent-detail { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 12px; color: var(--text-muted); margin-top: 8px; }
 .agent-prompt { font-size: 12px; color: var(--text-muted); background: var(--bg-primary); padding: 8px; border-radius: 6px; margin: 4px 0 0; font-family: var(--font-mono); }
-.agent-actions { display: flex; gap: 8px; margin-top: 12px; }
+.agent-actions { display: flex; gap: 8px; margin-top: auto; padding-top: 14px; }
 .empty-state-wrap { margin-top: 24px; }
 
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.field-hint { margin-top: 6px; color: var(--text-muted); font-size: 12px; }
 .form-group .label-with-help { display: inline-flex; align-items: center; gap: 6px; }
 .help-dot {
   position: relative;
@@ -321,7 +318,7 @@ onMounted(load);
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
-.switch-field { display: flex; align-items: flex-end; }
+.switch-field { display: flex; align-items: center; }
 .switch-field .switch-line {
   display: flex;
   align-items: center;
@@ -331,10 +328,9 @@ onMounted(load);
   margin: 0;
   cursor: pointer;
 }
-.single-switch-row { grid-template-columns: 1fr 1fr; }
 
 @media (max-width: 640px) {
   .agent-grid { grid-template-columns: 1fr; }
-  .form-row, .single-switch-row { grid-template-columns: 1fr; }
+  .form-row { grid-template-columns: 1fr; }
 }
 </style>

@@ -155,7 +155,7 @@ onBeforeUnmount(closePanel);
 .app-select.open .select-trigger { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
 .select-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .select-value.placeholder { color: var(--text-muted); }
-.select-chevron { color: var(--text-muted); font-size: 11px; transition: transform 0.2s var(--ease-out); flex: 0 0 auto; }
+.select-chevron { color: var(--text-muted); font-size: 15px; line-height: 1; transition: transform 0.2s var(--ease-out), color 0.2s var(--ease-out); flex: 0 0 auto; }
 .app-select.open .select-chevron { transform: rotate(180deg); color: var(--accent); }
 </style>
 
