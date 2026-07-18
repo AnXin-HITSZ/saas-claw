@@ -481,11 +481,11 @@ call_agent 不能调用其他 Claw 的 Agent
 - 用户可浏览市场并安装 Agent 到 Claw
 - Claw 对话支持 Agent 选择和审批展示
 
-- [ ] **Step 1: Agent 配置页增加发布入口**
+- [x] **Step 1: Agent 配置页增加发布入口**
 
 显示当前 Agent 的发布状态、最新版本、发布按钮。
 
-- [ ] **Step 2: 新增 Agent 市场页面**
+- [x] **Step 2: 新增 Agent 市场页面**
 
 能力：
 
@@ -496,7 +496,7 @@ call_agent 不能调用其他 Claw 的 Agent
 安装到 Claw
 ```
 
-- [ ] **Step 3: Claw Agent 列表改用 Agent Instance**
+- [x] **Step 3: Claw Agent 列表改用 Agent Instance**
 
 显示：
 
@@ -509,11 +509,11 @@ localProfile
 enabled/defaultRole
 ```
 
-- [ ] **Step 4: Claw 对话增加 Agent 选择**
+- [x] **Step 4: Claw 对话增加 Agent 选择**
 
 同一 conversation 中可选择本轮回答 Agent；消息气泡显示 Agent Instance/roleKey。
 
-- [ ] **Step 5: 审批 UI 支持 agent_install**
+- [x] **Step 5: 审批 UI 支持 agent_install**
 
 审批卡片区分：
 
@@ -523,7 +523,7 @@ Agent 引入审批
 Agent 调用审批
 ```
 
-- [ ] **Step 6: 构建验证**
+- [x] **Step 6: 构建验证**
 
 运行：
 

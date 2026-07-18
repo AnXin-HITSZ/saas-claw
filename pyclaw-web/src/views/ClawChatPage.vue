@@ -6,9 +6,9 @@
       <h1>{{ claw?.name || "对话" }}</h1>
       <span v-if="claw" class="status-tag" :class="claw.status">{{ claw.status }}</span>
       <div class="role-picker" v-if="roles.length > 1">
-        <select v-model="selectedRoleKey" class="role-select">
-          <option v-for="r in roles" :key="r.roleKey" :value="r.roleKey">
-            {{ r.displayName }}{{ r.defaultRole ? ' · 默认' : '' }}
+        <select v-model="selectedAgentInstanceId" class="role-select" @change="onAgentSelected">
+          <option v-for="r in roles" :key="r.id || r.roleKey" :value="r.id">
+            {{ r.displayName }}{{ r.defaultRole ? ' · 默认' : '' }}{{ r.sourceType === 'package' ? ' (市场)' : '' }}
           </option>
         </select>
       </div>
@@ -146,6 +146,8 @@ const prompt = ref("");
 const sending = ref(false);
 const error = ref("");
 const selectedRoleKey = ref("");
+const conversationId = ref(null);
+const selectedAgentInstanceId = ref("");
 const messagesEl = ref(null);
 const inputEl = ref(null);
 const showScrollHint = ref(false);
@@ -169,8 +171,9 @@ async function load() {
     claw.value = c;
     roles.value = (c.roles || []).filter(r => r.enabled);
     sessions.value = s || [];
-    if (!selectedRoleKey.value && roles.value.length) {
+    if (!selectedAgentInstanceId.value && roles.value.length) {
       const def = roles.value.find(r => r.defaultRole) || roles.value[0];
+      selectedAgentInstanceId.value = def.id;
       selectedRoleKey.value = def.roleKey;
     }
   } catch (e) {
@@ -178,7 +181,15 @@ async function load() {
   }
 }
 
+function onAgentSelected() {
+  const selected = roles.value.find(r => r.id === selectedAgentInstanceId.value);
+  if (selected) {
+    selectedRoleKey.value = selected.roleKey;
+  }
+}
+
 function newSession() {
+  conversationId.value = null;
   activeSessionId.value = null;
   messages.value = [];
   error.value = "";
@@ -217,6 +228,8 @@ async function sendMessage() {
       prompt: text,
       roleKey: selectedRoleKey.value || undefined,
       sessionId: activeSessionId.value || undefined,
+      conversationId: conversationId.value || undefined,
+      agentInstanceId: selectedAgentInstanceId.value || undefined,
     });
     await handleChatResponse(res);
   } catch (e) {
@@ -231,6 +244,8 @@ async function sendMessage() {
 async function handleChatResponse(res) {
   if (!res) return;
   activeSessionId.value = res.sessionId || activeSessionId.value;
+  if (res.conversationId) conversationId.value = res.conversationId;
+  if (res.agentInstanceId) selectedAgentInstanceId.value = res.agentInstanceId;
   if (res.status === "PENDING_APPROVAL") {
     const assistantText = res.text || "该操作需要你确认后继续执行。";
     messages.value.push({ role: "assistant", content: assistantText });

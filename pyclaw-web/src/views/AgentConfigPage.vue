@@ -30,8 +30,12 @@
         <p v-if="agent.systemPrompt" class="agent-prompt">System Prompt: {{ truncate(agent.systemPrompt, 100) }}</p>
         <div class="agent-actions">
           <button class="btn-sm" @click="openEdit(agent)">编辑</button>
+          <button class="btn-sm btn-publish" @click="openPublish(agent)">发布</button>
           <button class="btn-sm btn-danger" @click="handleDelete(agent)">删除</button>
         </div>
+        <p v-if="agent.publishStatus" class="publish-status">
+          已发布: {{ agent.publishStatus }}
+        </p>
       </div>
     </div>
 
@@ -111,6 +115,46 @@
           <div class="modal-actions">
             <button type="button" class="btn-secondary" @click="showModal = false">取消</button>
             <button type="submit" class="btn-primary">保存</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Publish Modal -->
+    <div v-if="showPublishModal" class="modal-overlay" @click.self="showPublishModal = false">
+      <div class="modal">
+        <h2>发布 Agent: {{ publishTarget?.name }}</h2>
+        <form @submit.prevent="handlePublish">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Package Key *</label>
+              <input v-model="publishForm.packageKey" required placeholder="my-agent-package" />
+            </div>
+            <div class="form-group">
+              <label>版本 *</label>
+              <input v-model="publishForm.version" required placeholder="1.0.0" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label>可见性</label>
+            <select v-model="publishForm.visibility">
+              <option value="private">private — 仅自己可见</option>
+              <option value="unlisted">unlisted — 有链接可见</option>
+              <option value="public">public — 市场可见</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>简介</label>
+            <input v-model="publishForm.summary" placeholder="简要描述 Agent 的用途" />
+          </div>
+          <div class="form-group">
+            <label>更新日志</label>
+            <input v-model="publishForm.changelog" placeholder="本次发布的变更说明" />
+          </div>
+          <p v-if="publishError" class="chat-error">{{ publishError }}</p>
+          <div class="modal-actions">
+            <button type="button" class="btn-secondary" @click="showPublishModal = false">取消</button>
+            <button type="submit" class="btn-primary" :disabled="publishLoading">{{ publishLoading ? '发布中...' : '发布' }}</button>
           </div>
         </form>
       </div>
@@ -209,6 +253,45 @@ async function handleDelete(agent) {
   }
 }
 
+const showPublishModal = ref(false);
+const publishTarget = ref(null);
+const publishLoading = ref(false);
+const publishError = ref("");
+const publishForm = ref({ packageKey: "", version: "", visibility: "public", summary: "", changelog: "" });
+
+function openPublish(agent) {
+  publishTarget.value = agent;
+  publishForm.value = {
+    packageKey: agent.agentKey,
+    version: "1.0.0",
+    visibility: "public",
+    summary: agent.description || "",
+    changelog: "",
+  };
+  publishError.value = "";
+  showPublishModal.value = true;
+}
+
+async function handlePublish() {
+  publishLoading.value = true;
+  publishError.value = "";
+  try {
+    await api.post(`/api/agents/${publishTarget.value.id}/publish`, {
+      packageKey: publishForm.value.packageKey,
+      version: publishForm.value.version,
+      visibility: publishForm.value.visibility,
+      summary: publishForm.value.summary || undefined,
+      changelog: publishForm.value.changelog || undefined,
+    });
+    showPublishModal.value = false;
+    await load();
+  } catch (e) {
+    publishError.value = e.message;
+  } finally {
+    publishLoading.value = false;
+  }
+}
+
 function truncate(text, max) {
   if (!text) return "";
   return text.length > max ? text.slice(0, max) + "..." : text;
@@ -235,6 +318,9 @@ onMounted(load);
 .agent-actions { display: flex; gap: 8px; }
 .btn-sm { padding: 4px 12px; font-size: 12px; border-radius: 4px; border: 1px solid var(--border-color); background: transparent; color: var(--text-secondary); }
 .btn-danger { color: var(--danger); border-color: var(--danger); }
+.btn-publish { color: var(--accent); border-color: var(--accent); }
+.publish-status { font-size: 11px; color: var(--success); margin-top: 4px; }
+.chat-error { color: var(--danger); font-size: 13px; margin-top: 8px; }
 .btn-primary { padding: 8px 20px; font-size: 14px; font-weight: 600; color: #fff; background: var(--accent); border: none; border-radius: 6px; }
 .btn-secondary { padding: 8px 20px; font-size: 14px; color: var(--text-secondary); background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; }
 .loading, .empty { text-align: center; padding: 48px; color: var(--text-secondary); }

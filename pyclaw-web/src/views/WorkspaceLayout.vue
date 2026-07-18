@@ -27,6 +27,10 @@
           <span class="nav-icon">⚙</span>
           <span>Agent 配置</span>
         </router-link>
+        <router-link to="/workspace/marketplace" class="nav-item">
+          <span class="nav-icon">⛁</span>
+          <span>Agent 市场</span>
+        </router-link>
         <router-link to="/workspace/providers" class="nav-item">
           <span class="nav-icon">▤</span>
           <span>Provider 管理</span>

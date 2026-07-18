@@ -57,6 +57,11 @@ const routes = [
         component: () => import("../views/ToolCatalogPage.vue"),
       },
       {
+        path: "marketplace",
+        name: "marketplace",
+        component: () => import("../views/MarketplacePage.vue"),
+      },
+      {
         path: "tokens",
         name: "tokens",
         component: () => import("../views/TokenPage.vue"),

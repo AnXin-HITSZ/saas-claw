@@ -49,6 +49,8 @@
               <span class="role-name">{{ role.displayName }}</span>
               <span class="role-key">{{ role.roleKey }}</span>
               <span class="role-agent">{{ role.agentName || role.agentId }}</span>
+              <span v-if="role.sourceType === 'package'" class="badge badge-package">市场安装</span>
+              <span v-if="role.localProfile" class="badge badge-profile">Profile: {{ role.localProfile }}</span>
               <span v-if="role.defaultRole" class="badge badge-accent">默认</span>
               <span v-if="!role.enabled" class="badge badge-danger">已禁用</span>
             </div>
@@ -59,6 +61,22 @@
           </div>
         </div>
         <p v-else class="no-data">无 Agent 角色</p>
+      </div>
+
+      <!-- Agent Install Approvals -->
+      <div v-if="installApprovals.length" class="card">
+        <h3>Agent 安装审批</h3>
+        <div v-for="approval in installApprovals" :key="approval.id" class="approval-item">
+          <div class="approval-info">
+            <span class="approval-type">agent_install</span>
+            <span class="approval-reason">{{ approval.reason || '请求安装 Agent' }}</span>
+            <span class="approval-status" :class="approval.status">{{ approval.status }}</span>
+          </div>
+          <div v-if="approval.status === 'PENDING'" class="approval-actions">
+            <button class="role-action" @click="resolveInstallApproval(approval.id, 'APROVED')">同意</button>
+            <button class="role-action danger" @click="resolveInstallApproval(approval.id, 'REJECTED')">拒绝</button>
+          </div>
+        </div>
       </div>
 
       <!-- Sessions Card -->
@@ -189,6 +207,7 @@ const showEdit = ref(false);
 const showAddRole = ref(false);
 const editingRole = ref(null);
 const editForm = ref({});
+const installApprovals = ref([]);
 const roleForm = ref(emptyRoleForm());
 const sandboxHealthy = ref(false);
 const sandboxWorkspace = ref("");
@@ -225,6 +244,9 @@ async function load() {
     }
     try { const w = await api.get(`/api/claws/${route.params.id}/sandbox/workspace`); sandboxWorkspace.value = typeof w === "string" ? w : JSON.stringify(w); } catch { sandboxWorkspace.value = ""; }
     sandboxLoading.value = false;
+    try {
+      installApprovals.value = await api.get(`/api/claws/${route.params.id}/install-approvals`).catch(() => []);
+    } catch { installApprovals.value = []; }
   } catch (e) {
     error.value = e.message;
   } finally {
@@ -433,6 +455,15 @@ function formatDate(s) {
   return new Date(s).toLocaleString("zh-CN");
 }
 
+async function resolveInstallApproval(approvalId, decision) {
+  try {
+    await api.post(`/api/claws/${route.params.id}/install-approvals/${approvalId}/resolve`, { decision });
+    await load();
+  } catch (e) {
+    alert("操作失败: " + e.message);
+  }
+}
+
 onMounted(load);
 </script>
 
@@ -523,6 +554,8 @@ dt { color: var(--text-muted); font-weight: 500; }
 .badge { font-size: 10px; padding: 1px 8px; border-radius: 8px; font-weight: 600; letter-spacing: 0.2px; }
 .badge-accent { background: var(--accent-glow); color: var(--accent); }
 .badge-danger { background: rgba(248,81,73,0.1); color: var(--danger); }
+.badge-package { background: rgba(63,185,80,0.12); color: var(--success); }
+.badge-profile { background: rgba(107,91,255,0.1); color: var(--accent); }
 
 .session-list { display: flex; flex-direction: column; gap: 6px; }
 .session-item { padding: 10px 14px; background: var(--bg-deep); border-radius: var(--radius-sm); font-size: 13px; transition: background 0.2s var(--ease-out); }
