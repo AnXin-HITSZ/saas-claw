@@ -18,6 +18,15 @@ public record ClawRoleResponse(
         int sortOrder,
         String routeBindingId,
         OffsetDateTime createdAt,
-        OffsetDateTime updatedAt
+        OffsetDateTime updatedAt,
+        // Agent Instance fields (ARCHITECTURE.md)
+        String sourceType,
+        String sourceAgentId,
+        String packageId,
+        String packageVersionId,
+        String localSystemPromptOverride,
+        String localProfile,
+        String installedBy,
+        OffsetDateTime installedAt
 ) {
 }

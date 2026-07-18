@@ -130,6 +130,10 @@ public class ClawService {
         );
     }
 
+    ClawRoleResponse toRoleResponsePublic(ClawAgentEntity entity) {
+        return toRoleResponse(entity);
+    }
+
     private ClawRoleResponse toRoleResponse(ClawAgentEntity entity) {
         AgentConfigEntity agent = agents.findById(entity.getAgentId()).orElse(null);
         return new ClawRoleResponse(
@@ -147,7 +151,15 @@ public class ClawService {
                 entity.getSortOrder(),
                 entity.getRouteBindingId(),
                 entity.getCreatedAt(),
-                entity.getUpdatedAt()
+                entity.getUpdatedAt(),
+                entity.getSourceType(),
+                entity.getSourceAgentId(),
+                entity.getPackageId(),
+                entity.getPackageVersionId(),
+                entity.getLocalSystemPromptOverride(),
+                entity.getLocalProfile(),
+                entity.getInstalledBy(),
+                entity.getInstalledAt()
         );
     }
 

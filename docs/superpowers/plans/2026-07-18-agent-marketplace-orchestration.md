@@ -189,7 +189,7 @@ private package 只 owner 可见
 - Agent Package Version 可安装到 Claw
 - 每次安装生成独立 Agent Instance ID
 
-- [ ] **Step 1: 实现 AgentInstallService.install**
+- [x] **Step 1: 实现 AgentInstallService.install**
 
 流程：
 
@@ -204,7 +204,7 @@ private package 只 owner 可见
 返回 Agent Instance
 ```
 
-- [ ] **Step 2: 实现 Agent Instance API**
+- [x] **Step 2: 实现 Agent Instance API**
 
 接口：
 
@@ -215,11 +215,11 @@ PATCH  /api/claws/{clawId}/agents/{agentInstanceId}
 DELETE /api/claws/{clawId}/agents/{agentInstanceId}
 ```
 
-- [ ] **Step 3: 调整现有 Claw 角色语义**
+- [x] **Step 3: 调整现有 Claw 角色语义**
 
 `roleKey` 保留为 UI 选择器和 @ 标识，但所有服务层主键使用 `agentInstanceId`。
 
-- [ ] **Step 4: 补测试**
+- [x] **Step 4: 补测试**
 
 覆盖：
 
