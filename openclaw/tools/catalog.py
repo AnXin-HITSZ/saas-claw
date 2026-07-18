@@ -5,6 +5,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from openclaw.tools.orchestration import (
+    create_call_agent_tool,
+    create_discover_agents_tool,
+    create_request_agent_install_tool,
+)
 from openclaw.tools.sandbox_workspace import (
     create_apply_patch_tool,
     create_list_files_tool,
@@ -106,6 +111,46 @@ CORE_TOOL_CATALOG: tuple[ToolCatalogEntry, ...] = (
         risk="medium",
         include_in_openclaw_group=True,
         prompt_hint="在当前 Claw 工作区中应用精确文本替换补丁。",
+    ),
+    # ---- Orchestration tools ----
+    ToolCatalogEntry(
+        id="discover_agents",
+        name="discover_agents",
+        label="发现 Agent",
+        description="搜索当前 Claw 可见的已发布 Agent Package。",
+        section_id="orchestration",
+        factory=create_discover_agents_tool,
+        profiles=("coding", "messaging", "full"),
+        tags=("orchestration", "agent-discovery"),
+        risk="low",
+        readonly=True,
+        prompt_hint="搜索可用的已发布 Agent，用于在运行时发现可引入的助手。",
+    ),
+    ToolCatalogEntry(
+        id="request_agent_install",
+        name="request_agent_install",
+        label="请求安装 Agent",
+        description="提交 Agent Package 安装请求（需要用户审批）。",
+        section_id="orchestration",
+        factory=create_request_agent_install_tool,
+        profiles=("coding", "messaging", "full"),
+        tags=("orchestration", "agent-install"),
+        risk="medium",
+        readonly=False,
+        prompt_hint="请求在当前 Claw 中安装一个已发现的 Agent Package。",
+    ),
+    ToolCatalogEntry(
+        id="call_agent",
+        name="call_agent",
+        label="调用 Agent",
+        description="调用当前 Claw 中另一个已启用的 Agent Instance，并获取其回复。",
+        section_id="orchestration",
+        factory=create_call_agent_tool,
+        profiles=("coding", "messaging", "full"),
+        tags=("orchestration", "agent-call"),
+        risk="medium",
+        readonly=False,
+        prompt_hint="向同一个 Claw 中的另一个 Agent 发送消息，并获取其回复。",
     ),
 )
 

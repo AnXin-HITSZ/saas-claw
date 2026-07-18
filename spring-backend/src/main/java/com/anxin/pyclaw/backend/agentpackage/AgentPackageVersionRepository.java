@@ -10,4 +10,6 @@ public interface AgentPackageVersionRepository extends JpaRepository<AgentPackag
     List<AgentPackageVersionEntity> findByPackageIdOrderByCreatedAtDesc(String packageId);
 
     List<AgentPackageVersionEntity> findByStatusAndPackageIdInOrderByCreatedAtDesc(String status, List<String> packageIds);
+
+    List<AgentPackageVersionEntity> findByStatusOrderByCreatedAtDesc(String status);
 }

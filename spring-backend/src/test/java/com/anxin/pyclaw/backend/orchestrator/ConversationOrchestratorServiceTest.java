@@ -64,7 +64,8 @@ class ConversationOrchestratorServiceTest {
         conv.setUpdatedAt(OffsetDateTime.now());
         when(conversationService.getOrCreate(any(), any(), any())).thenReturn(conv);
 
-        orchestrator = new ConversationOrchestratorService(claws, clawAgents, conversationService, memorySessionResolver);
+        orchestrator = new ConversationOrchestratorService(claws, clawAgents, conversationService, memorySessionResolver,
+                null, null, null, null);
     }
 
     @Test

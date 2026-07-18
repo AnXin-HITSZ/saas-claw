@@ -408,7 +408,7 @@ resume 使用同一个 agent memory session
 - 自动引入必须审批
 - Agent 可调用同一 Claw 内已启用 Agent Instance
 
-- [ ] **Step 1: Spring 实现 Orchestrator 内部 API**
+- [x] **Step 1: Spring 实现 Orchestrator 内部 API**
 
 接口：
 
@@ -418,7 +418,7 @@ POST /api/orchestrator/agents/install-requests
 POST /api/orchestrator/agents/call
 ```
 
-- [ ] **Step 2: FastAPI 新增工具**
+- [x] **Step 2: FastAPI 新增工具**
 
 工具：
 
@@ -430,7 +430,7 @@ call_agent
 
 工具 executor 只回调 Spring，不直接读写市场或 Claw 安装关系。
 
-- [ ] **Step 3: 实现 agent_install 审批**
+- [x] **Step 3: 实现 agent_install 审批**
 
 统一审批类型：
 
@@ -442,7 +442,7 @@ agent_call
 
 自动发现后的安装请求必须产生 `agent_install` 审批。
 
-- [ ] **Step 4: 实现 call_agent**
+- [x] **Step 4: 实现 call_agent**
 
 规则：
 
@@ -455,7 +455,7 @@ Spring 校验目标 Agent Instance 属于同一 Claw
 返回结果给发起 Agent
 ```
 
-- [ ] **Step 5: 补测试**
+- [x] **Step 5: 补测试**
 
 覆盖：
 
