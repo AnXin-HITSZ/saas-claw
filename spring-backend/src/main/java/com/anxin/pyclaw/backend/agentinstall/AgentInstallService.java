@@ -35,19 +35,22 @@ public class AgentInstallService {
     private final AgentPackageRepository packages;
     private final AgentPackageVersionRepository versions;
     private final AuditLogService auditLogService;
+    private final AgentInstallApprovalRepository installApprovals;
 
     public AgentInstallService(
             ClawRepository claws,
             ClawAgentRepository clawAgents,
             AgentPackageRepository packages,
             AgentPackageVersionRepository versions,
-            AuditLogService auditLogService
+            AuditLogService auditLogService,
+            AgentInstallApprovalRepository installApprovals
     ) {
         this.claws = claws;
         this.clawAgents = clawAgents;
         this.packages = packages;
         this.versions = versions;
         this.auditLogService = auditLogService;
+        this.installApprovals = installApprovals;
     }
 
     @Transactional
@@ -237,5 +240,62 @@ public class AgentInstallService {
 
     private void audit(Authentication authentication, String action, String resourceId, boolean success, String error) {
         auditLogService.record(actorType(authentication), actorId(authentication), action, "agent_instance", resourceId, success, error);
+    }
+
+    // ---- Install approval closure ----
+
+    @Transactional
+    public ClawAgentEntity approveInstall(String clawId, String approvalId, Authentication authentication) {
+        String actorId = actorId(authentication);
+
+        AgentInstallApprovalEntity approval = installApprovals.findByIdAndClawIdAndOwnerUserId(
+                        approvalId, clawId, actorId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Install approval not found"));
+
+        if (!AgentInstallApprovalStatus.PENDING.name().equals(approval.getStatus())) {
+            throw new ApiException(HttpStatus.CONFLICT,
+                    "Install approval is not pending (current status: " + approval.getStatus() + ")");
+        }
+
+        // Execute the install — this creates the actual claw_agents Agent Instance
+        AgentInstallRequest installReq = new AgentInstallRequest(
+                approval.getPackageVersionId(),
+                null,   // roleKey — auto-resolved from package key
+                null,   // displayName — auto-resolved from package name
+                null    // localProfile — auto-resolved from version default
+        );
+        ClawAgentEntity instance = install(approval.getClawId(), installReq, authentication);
+
+        // Mark approval as consumed
+        approval.setStatus(AgentInstallApprovalStatus.CONSUMED.name());
+        approval.setResolvedAt(OffsetDateTime.now());
+        installApprovals.save(approval);
+
+        audit(authentication, "agent_install.approve", instance.getId(), true, null);
+        return instance;
+    }
+
+    @Transactional
+    public void rejectInstall(String clawId, String approvalId, String reason, Authentication authentication) {
+        String actorId = actorId(authentication);
+
+        AgentInstallApprovalEntity approval = installApprovals.findByIdAndClawIdAndOwnerUserId(
+                        approvalId, clawId, actorId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Install approval not found"));
+
+        if (!AgentInstallApprovalStatus.PENDING.name().equals(approval.getStatus())) {
+            throw new ApiException(HttpStatus.CONFLICT,
+                    "Install approval is not pending (current status: " + approval.getStatus() + ")");
+        }
+
+        approval.setStatus(AgentInstallApprovalStatus.REJECTED.name());
+        approval.setResolvedAt(OffsetDateTime.now());
+        if (reason != null && !reason.isBlank()) {
+            approval.setReason((approval.getReason() != null ? approval.getReason() + " | rejected: " : "rejected: ")
+                    + reason.trim());
+        }
+        installApprovals.save(approval);
+
+        audit(authentication, "agent_install.reject", approvalId, true, reason);
     }
 }

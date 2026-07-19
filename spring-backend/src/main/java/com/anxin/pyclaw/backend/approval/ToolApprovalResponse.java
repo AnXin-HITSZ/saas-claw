@@ -23,6 +23,12 @@ public record ToolApprovalResponse(
         OffsetDateTime expiresAt,
         OffsetDateTime createdAt,
         OffsetDateTime resolvedAt,
-        String rejectReason
+        String rejectReason,
+        // Nested call chain context (Task 6)
+        String executingAgentInstanceId,
+        String executingRoleKey,
+        String callingAgentInstanceId,
+        String callingRoleKey,
+        String conversationId
 ) {
 }

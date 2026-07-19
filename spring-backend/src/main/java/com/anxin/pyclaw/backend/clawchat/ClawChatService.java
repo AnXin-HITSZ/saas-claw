@@ -218,7 +218,7 @@ public class ClawChatService {
         ToolApprovalRequestEntity approval = approvalService.requireOwnedActionable(
                 clawId, approvalId, principal, ToolApprovalDecision.APPROVED);
 
-        ResolvedRole resolved = resolveRoleForApproval(claw, approval.getRoleKey());
+        ResolvedRole resolved = resolveApprovalRole(claw, approval);
         AgentConfigEntity agent = requireAgentAccessible(
                 approval.getAgentId() != null ? approval.getAgentId() : resolved.agentId(),
                 claw.getOwnerUserId());
@@ -240,7 +240,7 @@ public class ClawChatService {
         ToolApprovalRequestEntity approval = approvalService.requireOwnedActionable(
                 clawId, approvalId, principal, ToolApprovalDecision.REJECTED);
 
-        ResolvedRole resolved = resolveRoleForApproval(claw, approval.getRoleKey());
+        ResolvedRole resolved = resolveApprovalRole(claw, approval);
         AgentConfigEntity agent = requireAgentAccessible(
                 approval.getAgentId() != null ? approval.getAgentId() : resolved.agentId(),
                 claw.getOwnerUserId());
@@ -325,8 +325,8 @@ public class ClawChatService {
                 agentConfigService.readList(policy.getToolsDenyJson()),
                 agentConfigService.readList(policy.getToolsAlsoAllowJson()),
                 sandboxBaseUrl,
-                null,   // conversation_id (pending approval store enhancement in Task 7)
-                null    // agent_instance_id
+                approval.getConversationId() != null ? approval.getConversationId() : null,
+                approval.getExecutingAgentInstanceId() != null ? approval.getExecutingAgentInstanceId() : null
         );
     }
 
@@ -474,6 +474,27 @@ public class ClawChatService {
         } catch (ApiException exc) {
             return resolveRole(claw, null);
         }
+    }
+
+    /**
+     * Resolve the approval's executing role, preferring the executingAgentInstanceId
+     * from nested call context when available.
+     */
+    private ResolvedRole resolveApprovalRole(ClawEntity claw, ToolApprovalRequestEntity approval) {
+        // If the approval was created during a nested agent call, use the
+        // executing agent instance (B) — not the original turn's agent (A).
+        if (approval.getExecutingAgentInstanceId() != null
+                && !approval.getExecutingAgentInstanceId().isBlank()) {
+            ClawAgentEntity instance = clawAgents.findById(approval.getExecutingAgentInstanceId())
+                    .orElse(null);
+            if (instance != null && instance.isEnabled()
+                    && Objects.equals(instance.getClawId(), claw.getId())) {
+                return new ResolvedRole(
+                        instance.getAgentId(), instance.getRoleKey(),
+                        instance.getDisplayName(), instance.getId());
+            }
+        }
+        return resolveRoleForApproval(claw, approval.getRoleKey());
     }
 
     private AgentConfigEntity requireAgentAccessible(String agentId, String ownerUserId) {

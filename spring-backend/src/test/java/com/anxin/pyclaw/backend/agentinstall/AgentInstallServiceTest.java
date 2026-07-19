@@ -44,6 +44,7 @@ class AgentInstallServiceTest {
     private AgentPackageRepository packages;
     private AgentPackageVersionRepository versions;
     private AuditLogService auditLogService;
+    private AgentInstallApprovalRepository installApprovals;
     private AgentInstallService service;
 
     private final List<ClawAgentEntity> clawAgentList = new ArrayList<>();
@@ -55,7 +56,8 @@ class AgentInstallServiceTest {
         packages = mock(AgentPackageRepository.class);
         versions = mock(AgentPackageVersionRepository.class);
         auditLogService = mock(AuditLogService.class);
-        service = new AgentInstallService(claws, clawAgents, packages, versions, auditLogService);
+        installApprovals = mock(AgentInstallApprovalRepository.class);
+        service = new AgentInstallService(claws, clawAgents, packages, versions, auditLogService, installApprovals);
 
         ClawEntity claw = new ClawEntity();
         claw.setId(CLAW_ID);
@@ -133,6 +135,86 @@ class AgentInstallServiceTest {
         // After delete, findById should be mocked as empty for subsequent calls
         when(clawAgents.findById("inst-1")).thenReturn(Optional.empty());
         assertThat(clawAgents.findById("inst-1")).isEmpty();
+    }
+
+    // ---- Install approval closure tests ----
+
+    @Test
+    void approveInstallCreatesAgentInstance() {
+        AgentInstallApprovalEntity approval = pendingApproval("approval-1", CLAW_ID, OWNER_ID);
+        when(installApprovals.findByIdAndClawIdAndOwnerUserId("approval-1", CLAW_ID, OWNER_ID))
+                .thenReturn(Optional.of(approval));
+
+        AgentPackageVersionEntity ver = publishedVersion(VER_ID, PKG_ID);
+        when(versions.findById(VER_ID)).thenReturn(Optional.of(ver));
+        AgentPackageEntity pkg = publicPackage(PKG_ID, OWNER_ID);
+        when(packages.findById(PKG_ID)).thenReturn(Optional.of(pkg));
+        when(clawAgents.save(any(ClawAgentEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(packages.save(any(AgentPackageEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(installApprovals.save(any(AgentInstallApprovalEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ClawAgentEntity result = service.approveInstall(CLAW_ID, "approval-1", auth(OWNER_ID, false));
+
+        assertThat(result).isNotNull();
+        assertThat(result.getClawId()).isEqualTo(CLAW_ID);
+        assertThat(result.getSourceType()).isEqualTo("package");
+        assertThat(approval.getStatus()).isEqualTo(AgentInstallApprovalStatus.CONSUMED.name());
+    }
+
+    @Test
+    void rejectInstallDoesNotCreateAgentInstance() {
+        AgentInstallApprovalEntity approval = pendingApproval("approval-2", CLAW_ID, OWNER_ID);
+        when(installApprovals.findByIdAndClawIdAndOwnerUserId("approval-2", CLAW_ID, OWNER_ID))
+                .thenReturn(Optional.of(approval));
+        when(installApprovals.save(any(AgentInstallApprovalEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.rejectInstall(CLAW_ID, "approval-2", "not needed", auth(OWNER_ID, false));
+
+        assertThat(approval.getStatus()).isEqualTo(AgentInstallApprovalStatus.REJECTED.name());
+        // No claw_agents save should have been called
+        verify(clawAgents, org.mockito.Mockito.never()).save(any(ClawAgentEntity.class));
+    }
+
+    @Test
+    void duplicateApprovalIsRejected() {
+        AgentInstallApprovalEntity approval = consumedApproval("approval-3", CLAW_ID, OWNER_ID);
+        when(installApprovals.findByIdAndClawIdAndOwnerUserId("approval-3", CLAW_ID, OWNER_ID))
+                .thenReturn(Optional.of(approval));
+
+        assertThatThrownBy(() -> service.approveInstall(CLAW_ID, "approval-3", auth(OWNER_ID, false)))
+                .isInstanceOfSatisfying(ApiException.class,
+                        exc -> assertThat(exc.status()).isEqualTo(HttpStatus.CONFLICT));
+    }
+
+    @Test
+    void approvalNotFoundForOtherUser() {
+        when(installApprovals.findByIdAndClawIdAndOwnerUserId("approval-4", CLAW_ID, OTHER_ID))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.approveInstall(CLAW_ID, "approval-4", auth(OTHER_ID, false)))
+                .isInstanceOfSatisfying(ApiException.class,
+                        exc -> assertThat(exc.status()).isEqualTo(HttpStatus.NOT_FOUND));
+    }
+
+    private AgentInstallApprovalEntity pendingApproval(String id, String clawId, String ownerId) {
+        AgentInstallApprovalEntity a = new AgentInstallApprovalEntity();
+        a.setId(id);
+        a.setApprovalType("agent_install");
+        a.setClawId(clawId);
+        a.setOwnerUserId(ownerId);
+        a.setPackageId(PKG_ID);
+        a.setPackageVersionId(VER_ID);
+        a.setReason("need k3s help");
+        a.setStatus(AgentInstallApprovalStatus.PENDING.name());
+        a.setCreatedAt(OffsetDateTime.now());
+        return a;
+    }
+
+    private AgentInstallApprovalEntity consumedApproval(String id, String clawId, String ownerId) {
+        AgentInstallApprovalEntity a = pendingApproval(id, clawId, ownerId);
+        a.setStatus(AgentInstallApprovalStatus.CONSUMED.name());
+        a.setResolvedAt(OffsetDateTime.now());
+        return a;
     }
 
     @Test

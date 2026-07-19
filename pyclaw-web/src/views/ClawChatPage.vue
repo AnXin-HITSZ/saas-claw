@@ -41,7 +41,7 @@
           <div v-if="messages.length === 0 && !sending && !loadingMessages" class="empty-chat">
             <div class="empty-chat-icon">&#x1F4AC;</div>
             <p>开始与 {{ claw?.name || 'Claw' }} 对话</p>
-            <p class="empty-hint">选择一个角色，输入你的第一条消息</p>
+            <p class="empty-hint">输入 @ 指定 Agent，或直接输入消息使用默认 Agent</p>
           </div>
 
           <!-- Loading skeleton -->
@@ -52,13 +52,27 @@
             </div>
           </div>
 
+          <!-- Main timeline messages (visibleInThread=true) -->
           <TransitionGroup name="msg">
-            <div v-for="(m, i) in messages" :key="i" class="message-wrapper" :class="m.role">
-              <div class="message">
-                <div class="message-role">{{ m.role === 'user' ? '你' : roleLabel }}</div>
-                <div class="message-bubble">{{ m.content }}</div>
+            <template v-for="(m, i) in visibleMessages" :key="m._key || i">
+              <div class="message-wrapper" :class="m.role">
+                <div class="message">
+                  <div class="message-role">{{ roleLabelFor(m) }}</div>
+                  <div class="message-bubble">{{ m.content }}</div>
+                  <!-- Folded sub-events -->
+                  <div v-if="getChildren(m._id).length" class="child-events">
+                    <FoldedAgentCall
+                      v-for="child in getChildren(m._id)"
+                      :key="child._key"
+                      :event="child"
+                      :claw-id="clawId"
+                      @approve="approveChildApproval(child)"
+                      @reject="rejectChildApproval(child, $event)"
+                    />
+                  </div>
+                </div>
               </div>
-            </div>
+            </template>
           </TransitionGroup>
 
           <div v-if="sending" class="message-wrapper assistant">
@@ -71,7 +85,7 @@
           </div>
         </div>
 
-        <!-- Tool approval modal -->
+        <!-- Tool approval modal (legacy modal fallback) -->
         <AppModal
           :show="showApprovalModal && !!pendingApproval"
           title="需要你确认后继续执行"
@@ -83,6 +97,14 @@
             </AppTag>
           </div>
           <div class="approval-body">
+            <div v-if="pendingApproval?.callingAgentInstanceId" class="approval-row">
+              <span class="approval-label">调用来源</span>
+              <span class="approval-value">由 {{ pendingApproval.callingRoleKey || 'Agent' }} 调用</span>
+            </div>
+            <div class="approval-row">
+              <span class="approval-label">执行 Agent</span>
+              <span class="approval-value">{{ pendingApproval?.executingRoleKey || pendingApproval?.roleKey || 'Agent' }}</span>
+            </div>
             <div class="approval-row">
               <span class="approval-label">工具名称</span>
               <span class="approval-value">{{ pendingApproval?.toolName }}</span>
@@ -122,12 +144,23 @@
           ↓ 新消息
         </div>
 
-        <!-- Input -->
+        <!-- Input with @Agent picker -->
         <div class="chat-input-area">
-          <textarea ref="inputEl" v-model="prompt" :disabled="sending"
-                    placeholder="输入消息..." rows="2"
-                    @keydown.enter.exact.prevent="sendMessage"
-                    @input="autoResize" />
+          <div class="input-wrapper">
+            <AgentMentionPicker
+              v-if="showMentionPicker"
+              :agents="roles"
+              :filter="mentionFilter"
+              @select="selectMentionedAgent"
+              @close="showMentionPicker = false"
+            />
+            <textarea ref="inputEl" v-model="prompt" :disabled="sending"
+                      placeholder="输入消息，输入 @ 选择 Agent..."
+                      rows="2"
+                      @keydown.enter.exact.prevent="sendMessage"
+                      @keydown="onInputKeydown"
+                      @input="onInput" />
+          </div>
           <button class="btn-send" :disabled="!prompt.trim() || sending"
                   @click="sendMessage">
             <AppSpinner v-if="sending" size="sm" class="send-spinner" />
@@ -150,6 +183,8 @@ import AppButton from "../components/ui/AppButton.vue";
 import AppSpinner from "../components/ui/AppSpinner.vue";
 import AppSelect from "../components/ui/AppSelect.vue";
 import AppSkeleton from "../components/ui/AppSkeleton.vue";
+import AgentMentionPicker from "../components/chat/AgentMentionPicker.vue";
+import FoldedAgentCall from "../components/chat/FoldedAgentCall.vue";
 
 const { toast } = useToast();
 
@@ -175,10 +210,77 @@ const approvalError = ref("");
 const rejectReasonInput = ref("");
 const loadingMessages = ref(false);
 
+// @Agent mention state
+const showMentionPicker = ref(false);
+const mentionFilter = ref("");
+const mentionStartPos = ref(-1);
+
 const roleLabel = computed(() => {
   const r = roles.value.find(r => r.roleKey === selectedRoleKey.value);
   return r ? r.displayName : "Agent";
 });
+
+// Visible messages — only those with visibleInThread=true
+const visibleMessages = computed(() => {
+  return messages.value
+    .filter(m => m.visibleInThread !== false)
+    .map((m, i) => ({ ...m, _key: m.id || `msg-${i}`, _id: m.id || `msg-${i}` }));
+});
+
+// Get children for a parent message
+function getChildren(parentId) {
+  if (!parentId) return [];
+  return messages.value
+    .filter(m => m.parentMessageId === parentId)
+    .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+    .map((m, i) => ({ ...m, _key: m.id || `child-${parentId}-${i}` }));
+}
+
+function roleLabelFor(m) {
+  if (m.role === 'user') return '你';
+  if (m.roleKey) {
+    const r = roles.value.find(r => r.roleKey === m.roleKey);
+    if (r) return r.displayName;
+  }
+  return m.role === 'assistant' ? 'Agent' : m.role;
+}
+
+// @Agent mention logic
+function onInputKeydown(e) {
+  if (e.key === '@') {
+    mentionStartPos.value = e.target.selectionStart;
+    showMentionPicker.value = true;
+    mentionFilter.value = "";
+  }
+}
+
+function onInput() {
+  autoResize();
+  if (!showMentionPicker.value) return;
+  const el = inputEl.value;
+  if (!el) return;
+  const cursorPos = el.selectionStart;
+  if (cursorPos <= mentionStartPos.value) {
+    showMentionPicker.value = false;
+    return;
+  }
+  const filter = prompt.value.substring(mentionStartPos.value + 1, cursorPos);
+  if (filter.includes(' ')) {
+    showMentionPicker.value = false;
+    return;
+  }
+  mentionFilter.value = filter.toLowerCase();
+}
+
+function selectMentionedAgent(agent) {
+  const before = prompt.value.substring(0, mentionStartPos.value);
+  const after = prompt.value.substring(inputEl.value?.selectionStart || mentionStartPos.value + 1);
+  prompt.value = before + '@' + agent.roleKey + ' ' + after;
+  selectedAgentInstanceId.value = agent.agentInstanceId;
+  selectedRoleKey.value = agent.roleKey;
+  showMentionPicker.value = false;
+  nextTick(() => inputEl.value?.focus());
+}
 
 async function load() {
   try {
@@ -187,11 +289,15 @@ async function load() {
       api.get(`/api/claws/${clawId.value}/chat/sessions`),
     ]);
     claw.value = c;
-    roles.value = (c.roles || []).filter(r => r.enabled);
+    roles.value = (c.roles || []).map(r => ({
+      ...r,
+      agentInstanceId: r.id || r.agentInstanceId,
+    })).filter(r => r.enabled);
     sessions.value = s || [];
     if (!selectedRoleKey.value && roles.value.length) {
       const def = roles.value.find(r => r.defaultRole) || roles.value[0];
       selectedRoleKey.value = def.roleKey;
+      selectedAgentInstanceId.value = def.agentInstanceId;
     }
   } catch (e) {
     toast.error("加载 Claw 失败: " + e.message);
@@ -200,6 +306,7 @@ async function load() {
 
 function newSession() {
   activeSessionId.value = null;
+  conversationId.value = null;
   messages.value = [];
 }
 
@@ -210,8 +317,10 @@ async function selectSession(sid) {
   try {
     const data = await api.get(`/api/sessions/${sid}`);
     messages.value = (data.messages || []).map(m => ({
+      id: m.id,
       role: m.role,
       content: m.content,
+      visibleInThread: true,
     }));
     await nextTick();
     scrollToBottom(false);
@@ -222,12 +331,44 @@ async function selectSession(sid) {
   }
 }
 
+async function loadConversationMessages() {
+  if (!conversationId.value) return;
+  try {
+    const data = await api.get(`/api/conversations/${conversationId.value}/messages`);
+    messages.value = (data || []).map(m => ({
+      id: m.id,
+      conversationId: m.conversationId,
+      parentMessageId: m.parentMessageId,
+      messageType: m.messageType,
+      visibleInThread: m.visibleInThread !== false,
+      sortOrder: m.sortOrder || 0,
+      role: m.role,
+      agentInstanceId: m.agentInstanceId,
+      agentKey: m.agentKey,
+      roleKey: m.roleKey,
+      content: m.content,
+      metadataJson: m.metadataJson,
+      createdAt: m.createdAt,
+    }));
+    await nextTick();
+    scrollToBottom(false);
+  } catch {
+    // conversation messages may not be available yet
+  }
+}
+
 async function sendMessage() {
   const text = prompt.value.trim();
   if (!text || sending.value) return;
   sending.value = true;
 
-  messages.value.push({ role: "user", content: text });
+  messages.value.push({
+    id: 'temp-' + Date.now(),
+    role: "user",
+    content: text,
+    roleKey: selectedRoleKey.value,
+    visibleInThread: true,
+  });
   prompt.value = "";
   if (inputEl.value) inputEl.value.style.height = "auto";
   await nextTick();
@@ -254,23 +395,42 @@ async function sendMessage() {
 async function handleChatResponse(res) {
   if (!res) return;
   activeSessionId.value = res.sessionId || activeSessionId.value;
-  if (res.conversationId) conversationId.value = res.conversationId;
+  if (res.conversationId) {
+    conversationId.value = res.conversationId;
+    // Load full conversation messages after getting a real conversationId
+    await loadConversationMessages();
+  }
   if (res.agentInstanceId) selectedAgentInstanceId.value = res.agentInstanceId;
   if (res.status === "PENDING_APPROVAL") {
     const assistantText = res.text || "该操作需要你确认后继续执行。";
-    messages.value.push({ role: "assistant", content: assistantText });
+    messages.value.push({
+      id: 'msg-' + Date.now(),
+      role: "assistant",
+      content: assistantText,
+      roleKey: res.roleKey,
+      agentInstanceId: res.agentInstanceId,
+      visibleInThread: true,
+    });
     pendingApproval.value = res.approval || null;
     if (pendingApproval.value) {
       showApprovalModal.value = true;
     }
-  } else {
-    messages.value.push({ role: "assistant", content: res.text || "(无回复)" });
+  } else if (!res.conversationId) {
+    // No conversationId — append inline (legacy session mode)
+    messages.value.push({
+      id: 'msg-' + Date.now(),
+      role: "assistant",
+      content: res.text || "(无回复)",
+      roleKey: res.roleKey,
+      agentInstanceId: res.agentInstanceId,
+      visibleInThread: true,
+    });
   }
   try {
     const s = await api.get(`/api/claws/${clawId.value}/chat/sessions`);
     sessions.value = s || [];
   } catch {
-    // ignore refresh failure; main content already updated
+    // ignore refresh failure
   }
 }
 
@@ -313,6 +473,40 @@ async function rejectApproval() {
   } finally {
     resolvingApproval.value = false;
   }
+}
+
+// Inline approval from folded events
+async function approveChildApproval(event) {
+  try {
+    const meta = parseMetadata(event.metadataJson);
+    const approvalId = meta?.approvalId || event.id;
+    const res = await api.post(`/api/claws/${clawId.value}/chat/approvals/${approvalId}/approve`);
+    await handleChatResponse(res);
+    await nextTick();
+    scrollToBottom(true);
+  } catch (e) {
+    toast.error("审批失败: " + e.message);
+  }
+}
+
+async function rejectChildApproval(event, reason) {
+  try {
+    const meta = parseMetadata(event.metadataJson);
+    const approvalId = meta?.approvalId || event.id;
+    const res = await api.post(`/api/claws/${clawId.value}/chat/approvals/${approvalId}/reject`, {
+      reason: reason || undefined,
+    });
+    await handleChatResponse(res);
+    await nextTick();
+    scrollToBottom(true);
+  } catch (e) {
+    toast.error("拒绝失败: " + e.message);
+  }
+}
+
+function parseMetadata(json) {
+  if (!json) return {};
+  try { return JSON.parse(json); } catch { return {}; }
 }
 
 function closeApprovalModal() {
@@ -473,13 +667,16 @@ onMounted(load);
   opacity: 0.45; pointer-events: none;
 }
 
+/* Child events (folded) */
+.child-events { margin-top: 8px; margin-left: 4px; }
+
 /* Message entrance animation */
 .msg-enter-active { transition: all 0.35s var(--ease-spring); }
 .msg-leave-active { transition: all 0.15s var(--ease-out); }
 .msg-enter-from { opacity: 0; transform: translateY(16px) scale(0.97); }
 .msg-leave-to { opacity: 0; }
 
-/* Thinking dots — amber breathing */
+/* Thinking dots */
 .thinking { display: flex; align-items: center; gap: 6px; padding: 16px 24px !important; min-width: 60px; }
 .dot {
   width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
@@ -505,7 +702,7 @@ onMounted(load);
   to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
-/* Input area — floating glass bar */
+/* Input area */
 .chat-input-area {
   position: absolute; bottom: 16px; left: 28px; right: 28px;
   display: flex; gap: 10px; padding: 10px;
@@ -520,11 +717,12 @@ onMounted(load);
   border-color: var(--accent);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), var(--glow-accent);
 }
+.input-wrapper { flex: 1; position: relative; }
 .chat-input-area textarea {
-  flex: 1; padding: 10px 14px; background: transparent; border: none;
+  width: 100%; padding: 10px 14px; background: transparent; border: none;
   color: var(--text-primary); font-size: 14px;
   resize: none; font-family: inherit; line-height: 1.5;
-  max-height: 160px;
+  max-height: 160px; box-sizing: border-box;
 }
 .chat-input-area textarea:focus { outline: none; }
 .chat-input-area textarea::placeholder { color: var(--text-muted); }
@@ -544,7 +742,7 @@ onMounted(load);
 
 .no-data { color: var(--text-muted); font-size: 12px; padding: 16px 8px; text-align: center; }
 
-/* Approval modal content */
+/* Approval modal */
 .approval-risk-row { margin-bottom: 14px; }
 .approval-body { display: flex; flex-direction: column; gap: 10px; margin-bottom: 4px; }
 .approval-row { display: flex; flex-direction: column; gap: 4px; }

@@ -7,6 +7,7 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.anxin.pyclaw.backend.audit.AuditLogService;
 import com.anxin.pyclaw.backend.auth.AuthenticatedPrincipal;
 import com.anxin.pyclaw.backend.claw.ClawAgentEntity;
 import com.anxin.pyclaw.backend.claw.ClawAgentRepository;
@@ -65,7 +66,7 @@ class ConversationOrchestratorServiceTest {
         when(conversationService.getOrCreate(any(), any(), any())).thenReturn(conv);
 
         orchestrator = new ConversationOrchestratorService(claws, clawAgents, conversationService, memorySessionResolver,
-                null, null, null, null);
+                null, null, null, null, mock(AuditLogService.class));
     }
 
     @Test

@@ -38,6 +38,17 @@ public class ConversationMessageEntity {
     @Column(nullable = false)
     private OffsetDateTime createdAt;
 
+    // ---- Multi-agent display model (Task 1) ----
+    @Column(length = 32)
+    private String messageType;
+    private String parentMessageId;
+    @Lob
+    private String metadataJson;
+    @Column(nullable = false)
+    private boolean visibleInThread = true;
+    @Column(nullable = false)
+    private int sortOrder;
+
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
     public String getConversationId() { return conversationId; }
@@ -64,4 +75,15 @@ public class ConversationMessageEntity {
     public void setContent(String content) { this.content = content; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
+
+    public String getMessageType() { return messageType; }
+    public void setMessageType(String messageType) { this.messageType = messageType; }
+    public String getParentMessageId() { return parentMessageId; }
+    public void setParentMessageId(String parentMessageId) { this.parentMessageId = parentMessageId; }
+    public String getMetadataJson() { return metadataJson; }
+    public void setMetadataJson(String metadataJson) { this.metadataJson = metadataJson; }
+    public boolean isVisibleInThread() { return visibleInThread; }
+    public void setVisibleInThread(boolean visibleInThread) { this.visibleInThread = visibleInThread; }
+    public int getSortOrder() { return sortOrder; }
+    public void setSortOrder(int sortOrder) { this.sortOrder = sortOrder; }
 }

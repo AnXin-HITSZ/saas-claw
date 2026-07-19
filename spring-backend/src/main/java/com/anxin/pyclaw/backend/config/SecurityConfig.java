@@ -35,7 +35,8 @@ public class SecurityConfig {
     }
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http, BearerAuthenticationFilter bearerFilter) throws Exception {
+    SecurityFilterChain securityFilterChain(HttpSecurity http, BearerAuthenticationFilter bearerFilter,
+                                            InternalServiceAuthFilter internalAuthFilter) throws Exception {
         return http
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -51,11 +52,13 @@ public class SecurityConfig {
                                 "/api/internal/channels/**",
                                 "/api/internal/agents/**",
                                 "/api/internal/route-bindings/**",
+                                "/api/internal/orchestrator/**",
                                 "/actuator/health",
                                 "/healthz"
                         ).permitAll()
                         .anyRequest().authenticated()
                 )
+                .addFilterBefore(internalAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(bearerFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }
@@ -63,6 +66,11 @@ public class SecurityConfig {
     @Bean
     BearerAuthenticationFilter bearerAuthenticationFilter(JwtService jwtService, ApiTokenService apiTokens, UserRepository users) {
         return new BearerAuthenticationFilter(jwtService, apiTokens, users);
+    }
+
+    @Bean
+    InternalServiceAuthFilter internalServiceAuthFilter(PyclawRuntimeProperties runtimeProperties) {
+        return new InternalServiceAuthFilter(runtimeProperties.internalToken());
     }
 
     static class BearerAuthenticationFilter extends OncePerRequestFilter {

@@ -100,6 +100,29 @@ public class ConversationService {
             String role,
             String content
     ) {
+        return saveMessage(conversationId, ownerUserId, clawId, agentInstanceId, agentId, agentKey,
+                roleKey, provider, model, role, content, null, null, null, true, 0);
+    }
+
+    @Transactional
+    public ConversationMessageEntity saveMessage(
+            String conversationId,
+            String ownerUserId,
+            String clawId,
+            String agentInstanceId,
+            String agentId,
+            String agentKey,
+            String roleKey,
+            String provider,
+            String model,
+            String role,
+            String content,
+            String messageType,
+            String parentMessageId,
+            String metadataJson,
+            boolean visibleInThread,
+            int sortOrder
+    ) {
         ConversationMessageEntity msg = new ConversationMessageEntity();
         msg.setId(UUID.randomUUID().toString());
         msg.setConversationId(conversationId);
@@ -114,6 +137,11 @@ public class ConversationService {
         msg.setRole(role);
         msg.setContent(content);
         msg.setCreatedAt(OffsetDateTime.now());
+        msg.setMessageType(messageType != null ? messageType : resolveDefaultMessageType(role));
+        msg.setParentMessageId(parentMessageId);
+        msg.setMetadataJson(metadataJson);
+        msg.setVisibleInThread(visibleInThread);
+        msg.setSortOrder(sortOrder);
 
         ConversationMessageEntity saved = messages.save(msg);
 
@@ -126,10 +154,37 @@ public class ConversationService {
         return saved;
     }
 
+    private String resolveDefaultMessageType(String role) {
+        if ("user".equalsIgnoreCase(role)) {
+            return MessageType.USER_MESSAGE.name();
+        }
+        if ("system".equalsIgnoreCase(role)) {
+            return MessageType.SYSTEM_EVENT.name();
+        }
+        return MessageType.AGENT_MESSAGE.name();
+    }
+
     public List<ConversationMessageEntity> getMessages(String conversationId, Authentication authentication) {
         String actorId = actorId(authentication);
         ConversationEntity conv = get(conversationId, authentication);
         return messages.findByConversationIdAndOwnerUserIdOrderByCreatedAtAsc(conv.getId(), actorId);
+    }
+
+    /**
+     * Internal access — queries conversation messages without user ownership check.
+     * Used by the Orchestrator to build sharedContext for nested agent calls.
+     */
+    public ConversationEntity getConversationInternal(String conversationId) {
+        return conversations.findById(conversationId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Conversation not found"));
+    }
+
+    /**
+     * Internal access — returns all messages for a conversation (no owner filter).
+     * Used by the Orchestrator to build sharedContext.
+     */
+    public List<ConversationMessageEntity> getMessagesInternal(String conversationId) {
+        return messages.findByConversationIdOrderByCreatedAtAsc(conversationId);
     }
 
     private boolean isAdmin(Authentication authentication) {

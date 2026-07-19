@@ -83,6 +83,18 @@ public class ToolApprovalRequestEntity {
     @Column(length = 1024)
     private String rejectReason;
 
+    // ---- Nested call chain context (Task 6) ----
+    @Column(length = 64)
+    private String executingAgentInstanceId;
+    @Column(length = 128)
+    private String executingRoleKey;
+    @Column(length = 64)
+    private String callingAgentInstanceId;
+    @Column(length = 128)
+    private String callingRoleKey;
+    @Column(length = 64)
+    private String conversationId;
+
     @Column(nullable = false)
     private OffsetDateTime createdAt;
 
@@ -133,4 +145,15 @@ public class ToolApprovalRequestEntity {
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
     public OffsetDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(OffsetDateTime updatedAt) { this.updatedAt = updatedAt; }
+
+    public String getExecutingAgentInstanceId() { return executingAgentInstanceId; }
+    public void setExecutingAgentInstanceId(String executingAgentInstanceId) { this.executingAgentInstanceId = executingAgentInstanceId; }
+    public String getExecutingRoleKey() { return executingRoleKey; }
+    public void setExecutingRoleKey(String executingRoleKey) { this.executingRoleKey = executingRoleKey; }
+    public String getCallingAgentInstanceId() { return callingAgentInstanceId; }
+    public void setCallingAgentInstanceId(String callingAgentInstanceId) { this.callingAgentInstanceId = callingAgentInstanceId; }
+    public String getCallingRoleKey() { return callingRoleKey; }
+    public void setCallingRoleKey(String callingRoleKey) { this.callingRoleKey = callingRoleKey; }
+    public String getConversationId() { return conversationId; }
+    public void setConversationId(String conversationId) { this.conversationId = conversationId; }
 }

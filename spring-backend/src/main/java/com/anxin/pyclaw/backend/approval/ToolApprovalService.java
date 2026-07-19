@@ -54,6 +54,25 @@ public class ToolApprovalService {
             PyclawApprovalResponse payload,
             Authentication authentication
     ) {
+        return createFromPyclaw(claw, sessionId, agentId, agentKey, roleKey, payload,
+                null, null, null, null, null, authentication);
+    }
+
+    @Transactional
+    public ToolApprovalResponse createFromPyclaw(
+            ClawEntity claw,
+            String sessionId,
+            String agentId,
+            String agentKey,
+            String roleKey,
+            PyclawApprovalResponse payload,
+            String executingAgentInstanceId,
+            String executingRoleKey,
+            String callingAgentInstanceId,
+            String callingRoleKey,
+            String conversationId,
+            Authentication authentication
+    ) {
         if (payload == null || payload.id() == null || payload.id().isBlank()) {
             throw new ApiException(HttpStatus.BAD_GATEWAY, "pyclaw returned PENDING_APPROVAL without an approval payload");
         }
@@ -75,6 +94,11 @@ public class ToolApprovalService {
         entity.setArgumentsPreview(serializePreview(payload.argumentsPreview()));
         entity.setPendingStateKey(payload.pendingStateKey());
         entity.setExpiresAt(parseExpiresAt(payload.expiresAt(), now.plusMinutes(30)));
+        entity.setExecutingAgentInstanceId(executingAgentInstanceId);
+        entity.setExecutingRoleKey(executingRoleKey);
+        entity.setCallingAgentInstanceId(callingAgentInstanceId);
+        entity.setCallingRoleKey(callingRoleKey);
+        entity.setConversationId(conversationId);
         entity.setCreatedAt(now);
         entity.setUpdatedAt(now);
         ToolApprovalRequestEntity saved = repository.save(entity);
@@ -205,7 +229,12 @@ public class ToolApprovalService {
                 entity.getExpiresAt(),
                 entity.getCreatedAt(),
                 entity.getResolvedAt(),
-                entity.getRejectReason()
+                entity.getRejectReason(),
+                entity.getExecutingAgentInstanceId(),
+                entity.getExecutingRoleKey(),
+                entity.getCallingAgentInstanceId(),
+                entity.getCallingRoleKey(),
+                entity.getConversationId()
         );
     }
 

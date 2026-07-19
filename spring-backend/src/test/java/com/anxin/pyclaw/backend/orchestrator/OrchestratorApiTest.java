@@ -13,6 +13,7 @@ import com.anxin.pyclaw.backend.agentpackage.AgentPackageEntity;
 import com.anxin.pyclaw.backend.agentpackage.AgentPackageRepository;
 import com.anxin.pyclaw.backend.agentpackage.AgentPackageVersionEntity;
 import com.anxin.pyclaw.backend.agentpackage.AgentPackageVersionRepository;
+import com.anxin.pyclaw.backend.audit.AuditLogService;
 import com.anxin.pyclaw.backend.auth.AuthenticatedPrincipal;
 import com.anxin.pyclaw.backend.claw.ClawAgentEntity;
 import com.anxin.pyclaw.backend.claw.ClawAgentRepository;
@@ -70,9 +71,10 @@ class OrchestratorApiTest {
         when(claws.findById(CLAW_ID)).thenReturn(Optional.of(claw));
         when(clawAgents.findByClawIdOrderBySortOrderAscCreatedAtAsc(CLAW_ID)).thenReturn(agents);
 
+        AuditLogService auditLogService = mock(AuditLogService.class);
         orchestrator = new ConversationOrchestratorService(
                 claws, clawAgents, conversationService, memorySessionResolver,
-                packages, versions, installApprovals, chatService);
+                packages, versions, installApprovals, chatService, auditLogService);
     }
 
     @Test
@@ -136,8 +138,21 @@ class OrchestratorApiTest {
         assertThat(result.getStatus()).isEqualTo("PENDING");
     }
 
+    private ClawAgentEntity mockCallingAgent() {
+        ClawAgentEntity calling = new ClawAgentEntity();
+        calling.setId("caller-inst");
+        calling.setClawId(CLAW_ID);
+        calling.setRoleKey("ops");
+        calling.setDisplayName("Ops Agent");
+        calling.setEnabled(true);
+        calling.setAgentId("agent-caller");
+        when(clawAgents.findById("caller-inst")).thenReturn(Optional.of(calling));
+        return calling;
+    }
+
     @Test
     void callAgentRejectsAgentInDifferentClaw() {
+        mockCallingAgent();
         ClawAgentEntity target = new ClawAgentEntity();
         target.setId("inst-1");
         target.setClawId("different-claw");
@@ -156,6 +171,7 @@ class OrchestratorApiTest {
 
     @Test
     void callAgentRejectsDisabledAgent() {
+        mockCallingAgent();
         ClawAgentEntity target = new ClawAgentEntity();
         target.setId("inst-1");
         target.setClawId(CLAW_ID);
@@ -173,14 +189,29 @@ class OrchestratorApiTest {
 
     @Test
     void callAgentDelegatesToClawChatService() {
+        mockCallingAgent();
         ClawAgentEntity target = new ClawAgentEntity();
         target.setId("inst-1");
         target.setClawId(CLAW_ID);
+        target.setDisplayName("K3s Helper");
         target.setRoleKey("k3s");
         target.setEnabled(true);
         target.setAgentId("agent-config-1");
         when(clawAgents.findById("inst-1")).thenReturn(Optional.of(target));
         when(clawAgents.findByClawIdOrderBySortOrderAscCreatedAtAsc(CLAW_ID)).thenReturn(List.of(target));
+
+        // Mock conversation
+        com.anxin.pyclaw.backend.conversation.ConversationEntity conv =
+                new com.anxin.pyclaw.backend.conversation.ConversationEntity();
+        conv.setId("conv-1");
+        conv.setClawId(CLAW_ID);
+        conv.setOwnerUserId(OWNER_ID);
+        conv.setTitle("Test");
+        conv.setStatus("active");
+        conv.setCreatedAt(OffsetDateTime.now());
+        conv.setUpdatedAt(OffsetDateTime.now());
+        when(conversationService.getConversationInternal("conv-1")).thenReturn(conv);
+        when(conversationService.getMessagesInternal("conv-1")).thenReturn(List.of());
 
         ClawChatRunResponse mockResp = new ClawChatRunResponse(
                 "COMPLETED", "session-1", CLAW_ID, "k3s", "agent-config-1", "k3s-agent",
@@ -204,6 +235,138 @@ class OrchestratorApiTest {
         ver.setDefaultProfile("messaging");
         ver.setCreatedAt(OffsetDateTime.now());
         return ver;
+    }
+
+    // ---- Internal (FastAPI → Spring) API tests ----
+
+    @Test
+    void internalDiscoverReturnsPublicPackages() {
+        AgentPackageVersionEntity ver = publishedVersion(VER_ID, PKG_ID);
+        when(versions.findByStatusOrderByCreatedAtDesc("published")).thenReturn(List.of(ver));
+        AgentPackageEntity pkg = new AgentPackageEntity();
+        pkg.setId(PKG_ID);
+        pkg.setOwnerUserId(OWNER_ID);
+        pkg.setPackageKey("k3s");
+        pkg.setName("K3s Helper");
+        pkg.setVisibility("public");
+        pkg.setInstallCount(0L);
+        pkg.setCreatedAt(OffsetDateTime.now());
+        pkg.setUpdatedAt(OffsetDateTime.now());
+        when(packages.findById(PKG_ID)).thenReturn(Optional.of(pkg));
+
+        OrchestratorDiscoverRequest req = new OrchestratorDiscoverRequest(CLAW_ID, null, null, null);
+        List<OrchestratorDiscoverResponse> results = orchestrator.discoverAgentsInternal(req, internalAuth());
+
+        assertThat(results).hasSize(1);
+    }
+
+    @Test
+    void internalDiscoverRejectsNonexistentClaw() {
+        OrchestratorDiscoverRequest req = new OrchestratorDiscoverRequest("nonexistent", null, null, null);
+
+        assertThatThrownBy(() -> orchestrator.discoverAgentsInternal(req, internalAuth()))
+                .isInstanceOfSatisfying(ApiException.class,
+                        exc -> assertThat(exc.status()).isEqualTo(HttpStatus.NOT_FOUND));
+    }
+
+    @Test
+    void internalCallAgentValidatesCallingAgentBelongsToClaw() {
+        ClawAgentEntity calling = new ClawAgentEntity();
+        calling.setId("caller-inst");
+        calling.setClawId("different-claw");
+        calling.setRoleKey("ops");
+        calling.setEnabled(true);
+        when(clawAgents.findById("caller-inst")).thenReturn(Optional.of(calling));
+
+        OrchestratorCallRequest req = new OrchestratorCallRequest(
+                CLAW_ID, "caller-inst", "target-inst", null, "hello", null);
+
+        assertThatThrownBy(() -> orchestrator.callAgentInternal(req, internalAuth()))
+                .isInstanceOfSatisfying(ApiException.class,
+                        exc -> assertThat(exc.status()).isEqualTo(HttpStatus.FORBIDDEN));
+    }
+
+    @Test
+    void internalCallAgentRejectsDisabledTarget() {
+        ClawAgentEntity calling = new ClawAgentEntity();
+        calling.setId("caller-inst");
+        calling.setClawId(CLAW_ID);
+        calling.setRoleKey("ops");
+        calling.setEnabled(true);
+        when(clawAgents.findById("caller-inst")).thenReturn(Optional.of(calling));
+
+        ClawAgentEntity target = new ClawAgentEntity();
+        target.setId("target-inst");
+        target.setClawId(CLAW_ID);
+        target.setRoleKey("k3s");
+        target.setEnabled(false);
+        when(clawAgents.findById("target-inst")).thenReturn(Optional.of(target));
+        when(clawAgents.findByClawIdOrderBySortOrderAscCreatedAtAsc(CLAW_ID)).thenReturn(List.of(target));
+
+        OrchestratorCallRequest req = new OrchestratorCallRequest(
+                CLAW_ID, "caller-inst", "target-inst", null, "hello", null);
+
+        assertThatThrownBy(() -> orchestrator.callAgentInternal(req, internalAuth()))
+                .isInstanceOfSatisfying(ApiException.class,
+                        exc -> assertThat(exc.status()).isEqualTo(HttpStatus.CONFLICT));
+    }
+
+    @Test
+    void internalCallAgentDelegatesToChatService() {
+        ClawAgentEntity calling = new ClawAgentEntity();
+        calling.setId("caller-inst");
+        calling.setClawId(CLAW_ID);
+        calling.setRoleKey("ops");
+        calling.setDisplayName("Ops Agent");
+        calling.setEnabled(true);
+        calling.setAgentId("agent-caller");
+        when(clawAgents.findById("caller-inst")).thenReturn(Optional.of(calling));
+
+        ClawAgentEntity target = new ClawAgentEntity();
+        target.setId("target-inst");
+        target.setClawId(CLAW_ID);
+        target.setRoleKey("k3s");
+        target.setDisplayName("K3s Helper");
+        target.setEnabled(true);
+        target.setAgentId("agent-config-1");
+        when(clawAgents.findById("target-inst")).thenReturn(Optional.of(target));
+        when(clawAgents.findByClawIdOrderBySortOrderAscCreatedAtAsc(CLAW_ID)).thenReturn(List.of(target));
+
+        // Mock conversation for sharedContext
+        com.anxin.pyclaw.backend.conversation.ConversationEntity conv =
+                new com.anxin.pyclaw.backend.conversation.ConversationEntity();
+        conv.setId("conv-1");
+        conv.setClawId(CLAW_ID);
+        conv.setOwnerUserId(OWNER_ID);
+        conv.setTitle("Test");
+        conv.setStatus("active");
+        conv.setCreatedAt(OffsetDateTime.now());
+        conv.setUpdatedAt(OffsetDateTime.now());
+        when(conversationService.getConversationInternal("conv-1")).thenReturn(conv);
+        when(conversationService.getMessagesInternal("conv-1")).thenReturn(List.of());
+
+        ClawChatRunResponse mockResp = new ClawChatRunResponse(
+                "COMPLETED", "session-1", CLAW_ID, "k3s", "agent-config-1", "k3s-agent",
+                "hello from k3s", null, 100L, null, "conv-1", "target-inst");
+        when(chatService.run(anyString(), any(), any())).thenReturn(mockResp);
+
+        OrchestratorCallRequest req = new OrchestratorCallRequest(
+                CLAW_ID, "caller-inst", "target-inst", null, "hello from caller", "conv-1");
+        ClawChatRunResponse result = orchestrator.callAgentInternal(req, internalAuth());
+
+        assertThat(result.status()).isEqualTo("COMPLETED");
+        assertThat(result.agentInstanceId()).isEqualTo("target-inst");
+    }
+
+    private Authentication internalAuth() {
+        List<GrantedAuthority> authorities = List.of(
+                new SimpleGrantedAuthority("agent:run"),
+                new SimpleGrantedAuthority("agent:read"));
+        AuthenticatedPrincipal principal = new AuthenticatedPrincipal(
+                "internal", "internal-service", "INTERNAL_SERVICE", authorities);
+        Authentication authentication = mock(Authentication.class);
+        when(authentication.getPrincipal()).thenReturn(principal);
+        return authentication;
     }
 
     private Authentication auth(String userId, boolean admin) {

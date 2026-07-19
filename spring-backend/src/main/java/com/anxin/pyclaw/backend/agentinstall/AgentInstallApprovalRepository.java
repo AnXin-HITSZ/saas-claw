@@ -10,4 +10,6 @@ public interface AgentInstallApprovalRepository extends JpaRepository<AgentInsta
     List<AgentInstallApprovalEntity> findByOwnerUserIdAndStatusOrderByCreatedAtDesc(String ownerUserId, String status);
 
     Optional<AgentInstallApprovalEntity> findByIdAndOwnerUserId(String id, String ownerUserId);
+
+    Optional<AgentInstallApprovalEntity> findByIdAndClawIdAndOwnerUserId(String id, String clawId, String ownerUserId);
 }

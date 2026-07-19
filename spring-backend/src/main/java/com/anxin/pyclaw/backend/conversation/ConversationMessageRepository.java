@@ -5,4 +5,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface ConversationMessageRepository extends JpaRepository<ConversationMessageEntity, String> {
     List<ConversationMessageEntity> findByConversationIdAndOwnerUserIdOrderByCreatedAtAsc(String conversationId, String ownerUserId);
+
+    List<ConversationMessageEntity> findByConversationIdOrderByCreatedAtAsc(String conversationId);
 }

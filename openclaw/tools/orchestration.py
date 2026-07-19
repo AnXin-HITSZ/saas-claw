@@ -2,7 +2,11 @@
 
 These tools let an Agent discover and interact with other Agents within the
 same Claw. All business logic is delegated to the Spring Backend
-Conversation Orchestrator — the FastAPI Runtime only executes tool calls.
+Conversation Orchestrator via internal service-to-service endpoints.
+
+FastAPI Runtime only executes tool calls — it does NOT route or decide
+permissions. Spring owns all business validation, authorization, and
+agent-to-agent call orchestration.
 """
 
 from __future__ import annotations
@@ -17,10 +21,18 @@ from openclaw.tools.types import ToolDefinition, ToolExecutionContext
 LOGGER = logging.getLogger(__name__)
 
 _SPRING_BASE_URL = os.environ.get("PYCLAW_SPRING_BASE_URL", "http://localhost:8080")
+_INTERNAL_TOKEN = os.environ.get("PYCLAW_API_TOKEN", "")
 
 
 def _spring_url(path: str) -> str:
     return _SPRING_BASE_URL.rstrip("/") + path
+
+
+def _internal_headers() -> dict[str, str]:
+    headers: dict[str, str] = {"Content-Type": "application/json"}
+    if _INTERNAL_TOKEN:
+        headers["Authorization"] = f"Bearer {_INTERNAL_TOKEN}"
+    return headers
 
 
 def _post_json(path: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -31,7 +43,7 @@ def _post_json(path: str, payload: dict[str, Any]) -> dict[str, Any]:
 
     url = _spring_url(path)
     try:
-        resp = httpx.post(url, json=payload, timeout=60.0)
+        resp = httpx.post(url, json=payload, headers=_internal_headers(), timeout=60.0)
         resp.raise_for_status()
         return resp.json()  # type: ignore[no-any-return]
     except Exception as exc:
@@ -39,12 +51,33 @@ def _post_json(path: str, payload: dict[str, Any]) -> dict[str, Any]:
         return {"error": str(exc)}
 
 
+def _runtime_context(context: ToolExecutionContext) -> dict[str, Any]:
+    """Extract runtime-injected fields from the tool execution context.
+
+    These are injected by the OpenClaw Runtime from the /v1/agent/run request
+    body and must never be provided by the model.
+    """
+    meta = context.metadata or {}
+    return {
+        "claw_id": str(meta.get("claw_id") or ""),
+        "conversation_id": str(meta.get("conversation_id") or ""),
+        "agent_instance_id": str(meta.get("agent_instance_id") or ""),
+        "role_key": str(meta.get("role_key") or ""),
+        "agent_key": str(meta.get("agent_key") or ""),
+        "owner_user_id": str(meta.get("owner_user_id") or ""),
+    }
+
+
 # ---- Tool: discover_agents ----
 
 
-def _exec_discover_agents(claw_id: str, query: str = "", **_: Any) -> dict[str, Any]:
-    payload: dict[str, Any] = {"clawId": claw_id, "query": query}
-    result = _post_json("/api/orchestrator/agents/discover", payload)
+def _exec_discover_agents(context: ToolExecutionContext, query: str = "", **_: Any) -> dict[str, Any]:
+    ctx = _runtime_context(context)
+    if not ctx["claw_id"]:
+        return {"status": "error", "message": "Runtime context missing claw_id"}
+
+    payload: dict[str, Any] = {"clawId": ctx["claw_id"], "query": query}
+    result = _post_json("/api/internal/orchestrator/agents/discover", payload)
     if isinstance(result, dict) and result.get("error"):
         return {"status": "error", "message": result["error"]}
     return {"status": "ok", "candidates": result if isinstance(result, list) else []}
@@ -52,7 +85,7 @@ def _exec_discover_agents(claw_id: str, query: str = "", **_: Any) -> dict[str, 
 
 def create_discover_agents_tool() -> ToolDefinition:
     async def execute(context: ToolExecutionContext, arguments: dict[str, Any]) -> dict[str, Any]:
-        return _exec_discover_agents(**arguments)
+        return _exec_discover_agents(context, **arguments)
 
     return ToolDefinition(
         name="discover_agents",
@@ -61,10 +94,8 @@ def create_discover_agents_tool() -> ToolDefinition:
         input_schema={
             "type": "object",
             "properties": {
-                "claw_id": {"type": "string", "description": "当前 Claw ID"},
                 "query": {"type": "string", "description": "搜索关键字（可选）"},
             },
-            "required": ["claw_id"],
         },
         execute=execute,
     )
@@ -74,19 +105,22 @@ def create_discover_agents_tool() -> ToolDefinition:
 
 
 def _exec_request_agent_install(
-    claw_id: str,
+    context: ToolExecutionContext,
     package_version_id: str,
-    requesting_agent_instance_id: str = "",
     reason: str = "",
     **_: Any,
 ) -> dict[str, Any]:
+    ctx = _runtime_context(context)
+    if not ctx["claw_id"]:
+        return {"status": "error", "message": "Runtime context missing claw_id"}
+
     payload: dict[str, Any] = {
-        "clawId": claw_id,
+        "clawId": ctx["claw_id"],
         "packageVersionId": package_version_id,
-        "requestingAgentInstanceId": requesting_agent_instance_id or None,
+        "requestingAgentInstanceId": ctx["agent_instance_id"] or None,
         "reason": reason,
     }
-    result = _post_json("/api/orchestrator/agents/install-requests", payload)
+    result = _post_json("/api/internal/orchestrator/agents/install-requests", payload)
     if isinstance(result, dict) and result.get("error"):
         return {"status": "error", "message": result["error"]}
     return {
@@ -98,21 +132,19 @@ def _exec_request_agent_install(
 
 def create_request_agent_install_tool() -> ToolDefinition:
     async def execute(context: ToolExecutionContext, arguments: dict[str, Any]) -> dict[str, Any]:
-        return _exec_request_agent_install(**arguments)
+        return _exec_request_agent_install(context, **arguments)
 
     return ToolDefinition(
         name="request_agent_install",
         label="请求安装 Agent",
-        description="为当前 Claw 提交 Agent Package 的安装请求。需要用户审批后才能安装。",
+        description="提交 Agent Package 安装请求（需要用户审批）。",
         input_schema={
             "type": "object",
             "properties": {
-                "claw_id": {"type": "string", "description": "当前 Claw ID"},
                 "package_version_id": {"type": "string", "description": "要安装的 Package Version ID"},
-                "requesting_agent_instance_id": {"type": "string", "description": "发起请求的 Agent Instance ID（可选）"},
                 "reason": {"type": "string", "description": "安装原因（可选）"},
             },
-            "required": ["claw_id", "package_version_id"],
+            "required": ["package_version_id"],
         },
         execute=execute,
     )
@@ -122,35 +154,46 @@ def create_request_agent_install_tool() -> ToolDefinition:
 
 
 def _exec_call_agent(
-    claw_id: str,
-    calling_agent_instance_id: str,
+    context: ToolExecutionContext,
     message: str,
     target_agent_instance_id: str = "",
     target_role_key: str = "",
-    conversation_id: str = "",
     **_: Any,
 ) -> dict[str, Any]:
+    ctx = _runtime_context(context)
+    if not ctx["claw_id"]:
+        return {"status": "error", "message": "Runtime context missing claw_id"}
+    if not ctx["agent_instance_id"]:
+        return {"status": "error", "message": "Runtime context missing agent_instance_id"}
+
     payload: dict[str, Any] = {
-        "clawId": claw_id,
-        "callingAgentInstanceId": calling_agent_instance_id,
+        "clawId": ctx["claw_id"],
+        "callingAgentInstanceId": ctx["agent_instance_id"],
         "message": message,
         "targetAgentInstanceId": target_agent_instance_id or None,
         "targetRoleKey": target_role_key or None,
-        "conversationId": conversation_id or None,
+        "conversationId": ctx["conversation_id"] or None,
     }
-    result = _post_json("/api/orchestrator/agents/call", payload)
+
+    # Remove None values that Spring would reject or treat inconsistently
+    payload = {k: v for k, v in payload.items() if v is not None}
+
+    result = _post_json("/api/internal/orchestrator/agents/call", payload)
     if isinstance(result, dict) and result.get("error"):
         return {"status": "error", "message": result["error"]}
+
     return {
         "status": result.get("status", "COMPLETED"),
-        "text": result.get("text", ""),
         "agent_instance_id": result.get("agentInstanceId", ""),
+        "role_key": result.get("roleKey", ""),
+        "text": result.get("text", ""),
+        "message_id": result.get("messageId", ""),
     }
 
 
 def create_call_agent_tool() -> ToolDefinition:
     async def execute(context: ToolExecutionContext, arguments: dict[str, Any]) -> dict[str, Any]:
-        return _exec_call_agent(**arguments)
+        return _exec_call_agent(context, **arguments)
 
     return ToolDefinition(
         name="call_agent",
@@ -159,14 +202,11 @@ def create_call_agent_tool() -> ToolDefinition:
         input_schema={
             "type": "object",
             "properties": {
-                "claw_id": {"type": "string", "description": "当前 Claw ID"},
-                "calling_agent_instance_id": {"type": "string", "description": "发起调用的 Agent Instance ID"},
                 "message": {"type": "string", "description": "要发送给目标 Agent 的消息"},
                 "target_agent_instance_id": {"type": "string", "description": "目标 Agent Instance ID（与 target_role_key 二选一）"},
                 "target_role_key": {"type": "string", "description": "目标 Agent 的 roleKey（与 target_agent_instance_id 二选一）"},
-                "conversation_id": {"type": "string", "description": "当前 Conversation ID（可选）"},
             },
-            "required": ["claw_id", "calling_agent_instance_id", "message"],
+            "required": ["message"],
         },
         execute=execute,
     )
