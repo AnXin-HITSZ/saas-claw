@@ -499,10 +499,14 @@ async function handleDeleteRole(role) {
 
   const key = role.id || role.roleKey;
   deletingRoleId.value = key;
-  const roles = reindexRoles(ensureDefaultRole(existingRoleRequests().filter(item => !roleMatches(item, role))));
 
   try {
-    await api.put(`/api/claws/${route.params.id}`, baseUpdatePayload(roles, defaultAgentIdFromRoles(roles, roles.length ? roles[0].agentId : claw.value.defaultAgentId)));
+    if (role.id) {
+      await api.delete(`/api/claws/${route.params.id}/agents/${role.id}`);
+    } else {
+      const roles = reindexRoles(ensureDefaultRole(existingRoleRequests().filter(item => !roleMatches(item, role))));
+      await api.put(`/api/claws/${route.params.id}`, baseUpdatePayload(roles, defaultAgentIdFromRoles(roles, roles.length ? roles[0].agentId : claw.value.defaultAgentId)));
+    }
     toast.success("已删除");
     await load();
   } catch (e) { toast.error("删除角色失败: " + e.message); } finally {

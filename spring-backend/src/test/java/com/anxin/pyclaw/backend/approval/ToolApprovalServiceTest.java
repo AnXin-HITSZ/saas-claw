@@ -87,6 +87,13 @@ class ToolApprovalServiceTest {
     }
 
     @Test
+    void requireOwnedPendingRejectsBlankApprovalIdBeforeRepositoryLookup() {
+        assertThatThrownBy(() -> service.requireOwnedPending("claw-1", " ", newPrincipal()))
+                .isInstanceOf(ApiException.class)
+                .satisfies(exc -> assertThat(((ApiException) exc).status()).isEqualTo(HttpStatus.BAD_REQUEST));
+    }
+
+    @Test
     void requireOwnedPendingRejectsResolvedApproval() {
         ToolApprovalRequestEntity entity = pendingEntity();
         entity.setStatus(ToolApprovalStatus.CONSUMED);

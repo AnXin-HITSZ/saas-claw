@@ -11,6 +11,7 @@ import com.anxin.pyclaw.backend.claw.ClawAgentRepository;
 import com.anxin.pyclaw.backend.claw.ClawEntity;
 import com.anxin.pyclaw.backend.claw.ClawRepository;
 import com.anxin.pyclaw.backend.common.ApiException;
+import com.anxin.pyclaw.backend.routebinding.RouteBindingRepository;
 import jakarta.transaction.Transactional;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -36,6 +37,7 @@ public class AgentInstallService {
     private final AgentPackageVersionRepository versions;
     private final AuditLogService auditLogService;
     private final AgentInstallApprovalRepository installApprovals;
+    private final RouteBindingRepository routeBindings;
 
     public AgentInstallService(
             ClawRepository claws,
@@ -43,7 +45,8 @@ public class AgentInstallService {
             AgentPackageRepository packages,
             AgentPackageVersionRepository versions,
             AuditLogService auditLogService,
-            AgentInstallApprovalRepository installApprovals
+            AgentInstallApprovalRepository installApprovals,
+            RouteBindingRepository routeBindings
     ) {
         this.claws = claws;
         this.clawAgents = clawAgents;
@@ -51,6 +54,7 @@ public class AgentInstallService {
         this.versions = versions;
         this.auditLogService = auditLogService;
         this.installApprovals = installApprovals;
+        this.routeBindings = routeBindings;
     }
 
     @Transactional
@@ -162,8 +166,28 @@ public class AgentInstallService {
     @Transactional
     public void deleteInstance(String clawId, String agentInstanceId, Authentication authentication) {
         ClawAgentEntity instance = requireOwnedInstance(clawId, agentInstanceId, authentication);
+        boolean deletedDefault = instance.isDefaultRole();
+        if (instance.getRouteBindingId() != null) {
+            routeBindings.findById(instance.getRouteBindingId()).ifPresent(routeBindings::delete);
+            instance.setRouteBindingId(null);
+        }
         clawAgents.delete(instance);
+        if (deletedDefault) {
+            promoteNextDefaultRole(clawId, agentInstanceId);
+        }
         audit(authentication, "agent_instance.delete", agentInstanceId, true, null);
+    }
+
+    private void promoteNextDefaultRole(String clawId, String deletedInstanceId) {
+        clawAgents.findByClawIdOrderBySortOrderAscCreatedAtAsc(clawId).stream()
+                .filter(role -> !Objects.equals(role.getId(), deletedInstanceId))
+                .filter(ClawAgentEntity::isEnabled)
+                .findFirst()
+                .ifPresent(role -> {
+                    role.setDefaultRole(true);
+                    role.setUpdatedAt(OffsetDateTime.now());
+                    clawAgents.save(role);
+                });
     }
 
     private ClawAgentEntity requireOwnedInstance(String clawId, String agentInstanceId, Authentication authentication) {

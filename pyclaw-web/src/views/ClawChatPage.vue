@@ -411,7 +411,7 @@ async function handleChatResponse(res) {
       agentInstanceId: res.agentInstanceId,
       visibleInThread: true,
     });
-    pendingApproval.value = res.approval || null;
+    pendingApproval.value = normalizeApproval(res.approval);
     if (pendingApproval.value) {
       showApprovalModal.value = true;
     }
@@ -438,8 +438,14 @@ async function approveApproval() {
   if (!pendingApproval.value || resolvingApproval.value) return;
   resolvingApproval.value = true;
   approvalError.value = "";
-  const approvalId = pendingApproval.value.id;
+  const approvalId = approvalIdOf(pendingApproval.value);
   const cid = clawId.value;
+  if (!approvalId) {
+    approvalError.value = "审批失败: 缺少审批 ID，请刷新对话后重试。";
+    console.warn("Missing approval id", pendingApproval.value);
+    resolvingApproval.value = false;
+    return;
+  }
   try {
     const res = await api.post(`/api/claws/${cid}/chat/approvals/${approvalId}/approve`);
     closeApprovalModal();
@@ -457,9 +463,15 @@ async function rejectApproval() {
   if (!pendingApproval.value || resolvingApproval.value) return;
   resolvingApproval.value = true;
   approvalError.value = "";
-  const approvalId = pendingApproval.value.id;
+  const approvalId = approvalIdOf(pendingApproval.value);
   const cid = clawId.value;
   const reason = rejectReasonInput.value.trim();
+  if (!approvalId) {
+    approvalError.value = "拒绝失败: 缺少审批 ID，请刷新对话后重试。";
+    console.warn("Missing approval id", pendingApproval.value);
+    resolvingApproval.value = false;
+    return;
+  }
   try {
     const res = await api.post(`/api/claws/${cid}/chat/approvals/${approvalId}/reject`, {
       reason: reason || undefined,
@@ -479,7 +491,12 @@ async function rejectApproval() {
 async function approveChildApproval(event) {
   try {
     const meta = parseMetadata(event.metadataJson);
-    const approvalId = meta?.approvalId || event.id;
+    const approvalId = approvalIdOf(meta) || approvalIdOf(event);
+    if (!approvalId) {
+      toast.error("审批失败: 缺少审批 ID，请刷新对话后重试。");
+      console.warn("Missing child approval id", event);
+      return;
+    }
     const res = await api.post(`/api/claws/${clawId.value}/chat/approvals/${approvalId}/approve`);
     await handleChatResponse(res);
     await nextTick();
@@ -492,7 +509,12 @@ async function approveChildApproval(event) {
 async function rejectChildApproval(event, reason) {
   try {
     const meta = parseMetadata(event.metadataJson);
-    const approvalId = meta?.approvalId || event.id;
+    const approvalId = approvalIdOf(meta) || approvalIdOf(event);
+    if (!approvalId) {
+      toast.error("拒绝失败: 缺少审批 ID，请刷新对话后重试。");
+      console.warn("Missing child approval id", event);
+      return;
+    }
     const res = await api.post(`/api/claws/${clawId.value}/chat/approvals/${approvalId}/reject`, {
       reason: reason || undefined,
     });
@@ -507,6 +529,16 @@ async function rejectChildApproval(event, reason) {
 function parseMetadata(json) {
   if (!json) return {};
   try { return JSON.parse(json); } catch { return {}; }
+}
+
+function approvalIdOf(value) {
+  return value?.id || value?.approvalId || value?.approval_id || "";
+}
+
+function normalizeApproval(approval) {
+  if (!approval) return null;
+  const id = approvalIdOf(approval);
+  return id ? { ...approval, id } : approval;
 }
 
 function closeApprovalModal() {

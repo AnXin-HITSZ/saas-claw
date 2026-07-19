@@ -20,6 +20,7 @@ import com.anxin.pyclaw.backend.claw.ClawAgentRepository;
 import com.anxin.pyclaw.backend.claw.ClawEntity;
 import com.anxin.pyclaw.backend.claw.ClawRepository;
 import com.anxin.pyclaw.backend.common.ApiException;
+import com.anxin.pyclaw.backend.routebinding.RouteBindingRepository;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -45,6 +46,7 @@ class AgentInstallServiceTest {
     private AgentPackageVersionRepository versions;
     private AuditLogService auditLogService;
     private AgentInstallApprovalRepository installApprovals;
+    private RouteBindingRepository routeBindings;
     private AgentInstallService service;
 
     private final List<ClawAgentEntity> clawAgentList = new ArrayList<>();
@@ -57,7 +59,8 @@ class AgentInstallServiceTest {
         versions = mock(AgentPackageVersionRepository.class);
         auditLogService = mock(AuditLogService.class);
         installApprovals = mock(AgentInstallApprovalRepository.class);
-        service = new AgentInstallService(claws, clawAgents, packages, versions, auditLogService, installApprovals);
+        routeBindings = mock(RouteBindingRepository.class);
+        service = new AgentInstallService(claws, clawAgents, packages, versions, auditLogService, installApprovals, routeBindings);
 
         ClawEntity claw = new ClawEntity();
         claw.setId(CLAW_ID);
@@ -135,6 +138,33 @@ class AgentInstallServiceTest {
         // After delete, findById should be mocked as empty for subsequent calls
         when(clawAgents.findById("inst-1")).thenReturn(Optional.empty());
         assertThat(clawAgents.findById("inst-1")).isEmpty();
+    }
+
+    @Test
+    void deletingDefaultInstancePromotesNextEnabledRole() {
+        ClawAgentEntity deleted = new ClawAgentEntity();
+        deleted.setId("inst-default");
+        deleted.setClawId(CLAW_ID);
+        deleted.setDefaultRole(true);
+        deleted.setEnabled(true);
+
+        ClawAgentEntity next = new ClawAgentEntity();
+        next.setId("inst-next");
+        next.setClawId(CLAW_ID);
+        next.setDefaultRole(false);
+        next.setEnabled(true);
+        next.setUpdatedAt(OffsetDateTime.now());
+
+        clawAgentList.add(deleted);
+        clawAgentList.add(next);
+        when(clawAgents.findById("inst-default")).thenReturn(Optional.of(deleted));
+        when(clawAgents.save(any(ClawAgentEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.deleteInstance(CLAW_ID, "inst-default", auth(OWNER_ID, false));
+
+        assertThat(next.isDefaultRole()).isTrue();
+        verify(clawAgents).delete(deleted);
+        verify(clawAgents).save(next);
     }
 
     // ---- Install approval closure tests ----

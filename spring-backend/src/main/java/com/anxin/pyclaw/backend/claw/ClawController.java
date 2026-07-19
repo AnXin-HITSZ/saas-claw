@@ -87,7 +87,7 @@ public class ClawController {
     }
 
     @DeleteMapping("/{clawId}/agents/{agentInstanceId}")
-    @PreAuthorize("hasAuthority('claw:delete')")
+    @PreAuthorize("hasAuthority('claw:update')")
     public void deleteAgent(@PathVariable String clawId, @PathVariable String agentInstanceId, Authentication authentication) {
         installService.deleteInstance(clawId, agentInstanceId, authentication);
     }

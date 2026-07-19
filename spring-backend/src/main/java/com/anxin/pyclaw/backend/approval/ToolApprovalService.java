@@ -120,6 +120,9 @@ public class ToolApprovalService {
             AuthenticatedPrincipal principal,
             ToolApprovalDecision decision
     ) {
+        if (approvalId == null || approvalId.isBlank()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Approval id is required");
+        }
         ToolApprovalRequestEntity entity = repository
                 .findByIdAndClawIdAndOwnerUserId(approvalId, clawId, principal.userId())
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Approval not found"));
