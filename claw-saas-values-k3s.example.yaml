@@ -11,7 +11,7 @@ global:
 
 shared:
   datasourceUrl: "jdbc:mysql://saas-claw-mysql:3306/claw_saas_control?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai"
-  datasourceUsername: claw_saas
+  datasourceUsername: saas_claw
   jpaDdlAuto: update
   redisHost: redis-master
   redisPort: "6379"

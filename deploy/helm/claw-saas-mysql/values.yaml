@@ -18,7 +18,7 @@ mysql:
   databases:
     runtime: claw_saas_runtime
     control: claw_saas_control
-  user: claw_saas
+  user: saas_claw
   auth:
     createSecret: false
     existingSecret: saas-claw-mysql-secret

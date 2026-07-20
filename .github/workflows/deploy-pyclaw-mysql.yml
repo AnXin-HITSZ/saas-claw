@@ -57,5 +57,5 @@ jobs:
 
           echo "== Verify MySQL databases =="
           sudo /usr/local/bin/k3s kubectl -n saas-claw exec statefulset/saas-claw-mysql -- \
-            sh -c 'mysql -h 127.0.0.1 -uclaw_saas -p"$MYSQL_PASSWORD" -e "show databases;"'
+            sh -c 'mysql -h 127.0.0.1 -usaas_claw -p"$MYSQL_PASSWORD" -e "show databases;"'
           REMOTE_SCRIPT
