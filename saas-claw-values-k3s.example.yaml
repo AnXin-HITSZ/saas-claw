@@ -17,6 +17,10 @@ shared:
   redisPort: "6379"
 
 redis:
+  image:
+    repository: crpi-li78f6lp5zheaj11.cn-shenzhen.personal.cr.aliyuncs.com/saas-claw/redis
+    tag: "7-alpine"
+    pullPolicy: IfNotPresent
   maxmemory: 256mb
   persistence:
     size: 1Gi

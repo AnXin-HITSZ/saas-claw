@@ -32,7 +32,7 @@ spec:
     spec:
       containers:
         - name: redis
-          image: redis:7-alpine
+          image: "{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
           args:
             - redis-server
             - --appendonly

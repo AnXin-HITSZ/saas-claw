@@ -1,5 +1,5 @@
 image:
-  repository: mysql
+  repository: crpi-li78f6lp5zheaj11.cn-shenzhen.personal.cr.aliyuncs.com/saas-claw/mysql
   tag: "8.4"
   pullPolicy: IfNotPresent
 

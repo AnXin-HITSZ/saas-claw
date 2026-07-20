@@ -10,6 +10,10 @@ shared:
   redisPort: "6379"
 
 redis:
+  image:
+    repository: saas-claw/redis
+    tag: "7-alpine"
+    pullPolicy: IfNotPresent
   maxmemory: 256mb
   persistence:
     size: 1Gi
