@@ -16,49 +16,49 @@ redis:
 
 gateway:
   image:
-    repository: clawsaas/gateway
+    repository: saas-claw/gateway
     tag: latest
     pullPolicy: IfNotPresent
 
 backend-for-frontend:
   image:
-    repository: clawsaas/backend-for-frontend
+    repository: saas-claw/backend-for-frontend
     tag: latest
     pullPolicy: IfNotPresent
 
 claw-service:
   image:
-    repository: clawsaas/claw-service
+    repository: saas-claw/claw-service
     tag: latest
     pullPolicy: IfNotPresent
 
 runtime-service:
   image:
-    repository: clawsaas/runtime-service
+    repository: saas-claw/runtime-service
     tag: latest
     pullPolicy: IfNotPresent
 
 agent-marketplace-service:
   image:
-    repository: clawsaas/agent-marketplace-service
+    repository: saas-claw/agent-marketplace-service
     tag: latest
     pullPolicy: IfNotPresent
 
 billing-service:
   image:
-    repository: clawsaas/billing-service
+    repository: saas-claw/billing-service
     tag: latest
     pullPolicy: IfNotPresent
 
 skill-marketplace-service:
   image:
-    repository: clawsaas/skill-marketplace-service
+    repository: saas-claw/skill-marketplace-service
     tag: latest
     pullPolicy: IfNotPresent
 
 pyclaw-runtime-api:
   image:
-    repository: clawsaas/pyclaw-runtime-api
+    repository: saas-claw/pyclaw-runtime-api
     tag: latest
     pullPolicy: IfNotPresent
 

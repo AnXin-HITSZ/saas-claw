@@ -25,49 +25,49 @@ redis:
 # Defaults below are placeholders.
 gateway:
   image:
-    repository: <ACR_REGISTRY>/clawsaas/gateway
+    repository: <ACR_REGISTRY>/saas-claw/gateway
     tag: latest
     pullPolicy: IfNotPresent
 
 backend-for-frontend:
   image:
-    repository: <ACR_REGISTRY>/clawsaas/backend-for-frontend
+    repository: <ACR_REGISTRY>/saas-claw/backend-for-frontend
     tag: latest
     pullPolicy: IfNotPresent
 
 claw-service:
   image:
-    repository: <ACR_REGISTRY>/clawsaas/claw-service
+    repository: <ACR_REGISTRY>/saas-claw/claw-service
     tag: latest
     pullPolicy: IfNotPresent
 
 runtime-service:
   image:
-    repository: <ACR_REGISTRY>/clawsaas/runtime-service
+    repository: <ACR_REGISTRY>/saas-claw/runtime-service
     tag: latest
     pullPolicy: IfNotPresent
 
 agent-marketplace-service:
   image:
-    repository: <ACR_REGISTRY>/clawsaas/agent-marketplace-service
+    repository: <ACR_REGISTRY>/saas-claw/agent-marketplace-service
     tag: latest
     pullPolicy: IfNotPresent
 
 billing-service:
   image:
-    repository: <ACR_REGISTRY>/clawsaas/billing-service
+    repository: <ACR_REGISTRY>/saas-claw/billing-service
     tag: latest
     pullPolicy: IfNotPresent
 
 skill-marketplace-service:
   image:
-    repository: <ACR_REGISTRY>/clawsaas/skill-marketplace-service
+    repository: <ACR_REGISTRY>/saas-claw/skill-marketplace-service
     tag: latest
     pullPolicy: IfNotPresent
 
 pyclaw-runtime-api:
   image:
-    repository: <ACR_REGISTRY>/clawsaas/pyclaw-runtime-api
+    repository: <ACR_REGISTRY>/saas-claw/pyclaw-runtime-api
     tag: latest
     pullPolicy: IfNotPresent
 

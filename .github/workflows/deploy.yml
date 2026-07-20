@@ -78,7 +78,7 @@ jobs:
           file: ./${{ matrix.dockerfile }}
           push: true
           build-args: ${{ matrix.build-args }}
-          tags: ${{ secrets.ACR_REGISTRY }}/clawsaas/${{ matrix.name }}:${{ env.IMAGE_TAG }}
+          tags: ${{ secrets.ACR_REGISTRY }}/saas-claw/${{ matrix.name }}:${{ env.IMAGE_TAG }}
 
   build-single:
     runs-on: ubuntu-latest
@@ -101,7 +101,7 @@ jobs:
           file: ./backend/Dockerfile
           push: true
           build-args: SERVICE_NAME=${{ github.event.inputs.service }}
-          tags: ${{ secrets.ACR_REGISTRY }}/clawsaas/${{ github.event.inputs.service }}:${{ env.IMAGE_TAG }}
+          tags: ${{ secrets.ACR_REGISTRY }}/saas-claw/${{ github.event.inputs.service }}:${{ env.IMAGE_TAG }}
 
   deploy:
     needs: [build-and-push, build-single]
