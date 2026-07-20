@@ -118,6 +118,100 @@ Gateway 中的 `InternalServiceAuthFilter.java` 已失效（服务间走 Cluster
 
 ---
 
+## ECS 初始部署步骤
+
+新 ECS 或格式化后，按以下顺序执行：
+
+```bash
+# 1. 安装 K3s
+curl -sfL https://get.k3s.io | sh -
+
+# 2. 配置 kubectl 别名
+echo 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml' >> ~/.bashrc
+echo 'alias kubectl="sudo /usr/local/bin/k3s kubectl"' >> ~/.bashrc
+source ~/.bashrc
+
+# 3. Clone 仓库
+mkdir -p /opt/saas-claw
+cd /opt/saas-claw
+git clone git@github.com:AnXin-HITSZ/saas-claw.git .
+# 或 HTTPS: git clone https://github.com/AnXin-HITSZ/saas-claw.git .
+
+# 4. 创建 namespace
+kubectl create ns saas-claw
+
+# 5. 创建 ACR pull secret（拉镜像鉴权）
+kubectl create secret docker-registry aliyun-acr-pull-secret -n saas-claw \
+  --docker-server=crpi-li78f6lp5zheaj11.cn-shenzhen.personal.cr.aliyuncs.com \
+  --docker-username=AnXin_HITSZ \
+  --docker-password='<ACR密码>'
+
+# 6. 创建 MySQL Secret
+kubectl create secret generic saas-claw-mysql-secret -n saas-claw \
+  --from-literal=MYSQL_ROOT_PASSWORD='<强密码>' \
+  --from-literal=MYSQL_PASSWORD='<强密码>'
+
+# 7. 创建应用 Secret
+kubectl create secret generic saas-claw-secret -n saas-claw \
+  --from-literal=SPRING_DATASOURCE_PASSWORD='<同上>'
+
+# 8. 创建 TLS Secret（证书文件需先上传到 ECS）
+kubectl create secret tls saas-claw-tls -n saas-claw \
+  --cert=/opt/saas-claw/certs/fullchain.pem \
+  --key=/opt/saas-claw/certs/privkey.pem
+
+# 9. 创建生产 values 文件（从 example 复制并填入 ACR 路径）
+cp saas-claw-values-k3s.example.yaml saas-claw-values-k3s.yaml
+cp saas-claw-mysql-values-k3s.example.yaml saas-claw-mysql-values-k3s.yaml
+# 编辑 saas-claw-values-k3s.yaml，将 <ACR_REGISTRY> 替换为实际 ACR 地址
+
+# 10. 推送 docker.io 镜像到 ACR（ECS 无法直接拉 Docker Hub）
+docker pull mysql:8.4
+docker pull redis:7-alpine
+docker tag mysql:8.4 crpi-li78f6lp5zheaj11.cn-shenzhen.personal.cr.aliyuncs.com/saas-claw/mysql:8.4
+docker tag redis:7-alpine crpi-li78f6lp5zheaj11.cn-shenzhen.personal.cr.aliyuncs.com/saas-claw/redis:7-alpine
+docker login --username=AnXin_HITSZ crpi-li78f6lp5zheaj11.cn-shenzhen.personal.cr.aliyuncs.com
+docker push crpi-li78f6lp5zheaj11.cn-shenzhen.personal.cr.aliyuncs.com/saas-claw/mysql:8.4
+docker push crpi-li78f6lp5zheaj11.cn-shenzhen.personal.cr.aliyuncs.com/saas-claw/redis:7-alpine
+
+# 11. 手动部署 MySQL（首次）
+sudo helm --kubeconfig /etc/rancher/k3s/k3s.yaml upgrade --install saas-claw-mysql \
+  ./deploy/helm/saas-claw-mysql -n saas-claw \
+  -f saas-claw-mysql-values-k3s.yaml --timeout 10m
+
+# 12. 此后 git push main → GitHub Actions 自动构建 + 部署
+```
+
+## 部署故障排查
+
+### ImagePullBackOff
+
+常见原因：
+1. **镜像路径缺少 ACR 前缀**：helm 部署必须加 `-f saas-claw-values-k3s.yaml`，否则 image.repository 用 chart 默认短名 `saas-claw/gateway`，K3s 会去 Docker Hub 找。
+2. **tag 不存在**：CI 构建的镜像 tag 是 git SHA，如果 `--set image.tag` 传错 tag 就拉不到。
+3. **pull secret 失效**：检查 `kubectl get secret aliyun-acr-pull-secret -n saas-claw`
+
+调试命令：
+```bash
+kubectl describe pod <pod-name> -n saas-claw | tail -20  # 看 Events
+kubectl get deployment -n saas-claw -o yaml | grep -A3 image  # 看镜像路径
+```
+
+### Insufficient memory
+
+2C4G ECS 跑 8 个 Java 服务 + MySQL + Redis 较紧。资源限制已调为：
+- Java 服务：50m CPU / 128Mi request, 200m CPU / 256Mi limit
+- Redis: 64Mi request / 256Mi limit
+- MySQL: 250m CPU / 512Mi request, 1C / 1Gi limit
+
+如仍不够，考虑先部署核心服务（gateway + claw-service + runtime-service），其他暂不部署。
+
+### SSH 超时断开
+
+GitHub Actions SSH 到 ECS 执行 helm install 时，如果镜像拉取慢会超时断开。MySQL/Redis 回滚后不影响 PVC 数据，重试即可。后续优化方案：为 GitHub Actions runner 和 ECS 之间配置长连接。
+
+---
+
 ## 关键配置速查
 
 | 配置项 | 值 |
