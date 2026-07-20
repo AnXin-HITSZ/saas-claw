@@ -6,7 +6,7 @@ import copy
 import json
 import math
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 from uuid import uuid4
@@ -25,7 +25,7 @@ PrecheckRoute = Literal["fits", "compact_only", "truncate_tool_results_only", "c
 class SessionHeader:
     id: str
     cwd: str
-    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     version: int = SESSION_VERSION
     parentSession: str | None = None
     type: Literal["session"] = "session"
@@ -67,7 +67,7 @@ class CompactionPreparation:
 
 
 def now_iso() -> str:
-    return datetime.now(UTC).isoformat()
+    return datetime.now(timezone.utc).isoformat()
 
 
 def build_session_header(

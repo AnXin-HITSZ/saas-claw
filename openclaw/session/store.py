@@ -6,7 +6,7 @@ import json
 import os
 import time
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
@@ -86,7 +86,7 @@ class SessionStore:
         existing = self.entries.get(session_id)
         entry = SessionEntry(
             session_id=session_id,
-            updated_at=datetime.now(UTC).isoformat(),
+            updated_at=datetime.now(timezone.utc).isoformat(),
             session_file=session_file,
             status=status,
             cwd=cwd if cwd is not None else (existing.cwd if existing else None),
