@@ -26,7 +26,7 @@ jobs:
             -i ~/.ssh/id_ed25519 \
             ${{ secrets.ECS_USER }}@${{ secrets.ECS_HOST }} \
             "REF_NAME='${REF_NAME}' COMMIT_SHA='${COMMIT_SHA}' bash -se" <<'REMOTE_SCRIPT'
-          cd /opt/claw-saas
+          cd /opt/saas-claw
           rm -f .git/index.lock
           git fetch origin "${REF_NAME}"
           git reset --hard "${COMMIT_SHA}"

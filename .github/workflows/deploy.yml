@@ -17,7 +17,7 @@ on:
 
 env:
   IMAGE_TAG: ${{ github.sha }}
-  ECS_PATH: /opt/claw-saas
+  ECS_PATH: /opt/saas-claw
   NAMESPACE: saas-claw
 
 jobs:
