@@ -155,6 +155,13 @@ jobs:
             wait_for_k3s 12 10
           }
 
+          echo "== Deploy MySQL =="
+          sudo helm --kubeconfig "$KUBECONFIG_PATH" upgrade --install saas-claw-mysql ./deploy/helm/saas-claw-mysql \
+            -n "$NAMESPACE" \
+            --create-namespace \
+            -f saas-claw-mysql-values-k3s.yaml \
+            --timeout 10m
+
           deploy() {
             sudo helm --kubeconfig "$KUBECONFIG_PATH" upgrade --install saas-claw ./deploy/helm/saas-claw \
               -n "$NAMESPACE" \
