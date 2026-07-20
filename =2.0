@@ -1,0 +1,45 @@
+Looking in indexes: https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple
+Collecting fastapi
+  Using cached https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/5f/c7/cb03251d9dfb177246a9809a76f189d21df32dbd4a845951881d11323b7f/fastapi-0.139.2-py3-none-any.whl (130 kB)
+Collecting uvicorn[standard]>=0.32.0
+  Using cached https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/45/ec/dbb7e5a6b91f86bfb9eb7d2988a2730907b6a729875b949c7f022e8b88fa/uvicorn-0.51.0-py3-none-any.whl (73 kB)
+Collecting pydantic
+  Using cached https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/fd/7b/122376b1fd3c62c1ed9dc80c931ace4844b3c55407b6fb2d199377c9736f/pydantic-2.13.4-py3-none-any.whl (472 kB)
+Collecting pydantic-settings
+  Using cached https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/77/c1/6e422f34e569cf8e18df68d1939c81c099d2b61e4f7d9621c8a77560799c/pydantic_settings-2.14.2-py3-none-any.whl (61 kB)
+Collecting annotated-doc>=0.0.2
+  Using cached https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/1e/d3/26bf1008eb3d2daa8ef4cacc7f3bfdc11818d111f7e2d0201bc6e3b49d45/annotated_doc-0.0.4-py3-none-any.whl (5.3 kB)
+Collecting typing-inspection>=0.4.2
+  Using cached https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/dc/9b/47798a6c91d8bdb567fe2698fe81e0c6b7cb7ef4d13da4114b41d239f65d/typing_inspection-0.4.2-py3-none-any.whl (14 kB)
+Requirement already satisfied: typing-extensions>=4.8.0 in d:\developer\python\python_3_10_20\lib\site-packages (from fastapi) (4.15.0)
+Collecting starlette>=0.46.0
+  Using cached https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/ec/bb/2799cc2ede3ed41131f8975621e7213dfc7ef4acbbaadfa440f32500c370/starlette-1.3.1-py3-none-any.whl (73 kB)
+Collecting click>=7.0
+  Using cached https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/fb/e2/79c688af8b210d232694e31e59da9f6ec747bae31c3f5946e4e9b98860d5/click-8.4.2-py3-none-any.whl (119 kB)
+Collecting h11>=0.8
+  Using cached https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl (37 kB)
+Collecting watchfiles>=0.20
+  Using cached https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/6d/68/a5e67b6b68e94f4c1511d61c46c55eba0737583620b6febf194c7b9cc23f/watchfiles-1.2.0-cp310-cp310-win_amd64.whl (290 kB)
+Collecting python-dotenv>=0.13
+  Using cached https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/0b/d7/1959b9648791274998a9c3526f6d0ec8fd2233e4d4acce81bbae76b44b2a/python_dotenv-1.2.2-py3-none-any.whl (22 kB)
+Requirement already satisfied: pyyaml>=5.1 in d:\developer\python\python_3_10_20\lib\site-packages (from uvicorn[standard]>=0.32.0) (6.0.3)
+Collecting httptools>=0.8.0
+  Using cached https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/bb/e8/86b85bbc0ac7892232f1a99ab96a9aa71936984fa06adfc0afc83ca7789e/httptools-0.8.0-cp310-cp310-win_amd64.whl (90 kB)
+Collecting websockets>=13.0
+  Using cached https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/54/82/1013a5fe7ddae8e102bc3b4b39db81d8d28fd02100a324ce6ede8cd832b1/websockets-16.1.1-cp310-cp310-win_amd64.whl (180 kB)
+Collecting pydantic-core==2.46.4
+  Using cached https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/01/aa/62f082da2c91fac1c234bc9ee0066257ce83f0604abd72e4c9d5991f2d84/pydantic_core-2.46.4-cp310-cp310-win_amd64.whl (2.1 MB)
+Collecting annotated-types>=0.6.0
+  Using cached https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/78/b6/6307fbef88d9b5ee7421e68d78a9f162e0da4900bc5f5793f6d3d0e34fb8/annotated_types-0.7.0-py3-none-any.whl (13 kB)
+Collecting colorama
+  Using cached https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl (25 kB)
+Collecting anyio<5,>=3.6.2
+  Using cached https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/da/35/f2287558c17e29fafc8ef3daf819bb9834061cfa43bff8014f7df7f63bdc/anyio-4.14.2-py3-none-any.whl (125 kB)
+Collecting exceptiongroup>=1.0.2
+  Using cached https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/8a/0e/97c33bf5009bdbac74fd2beace167cab3f978feb69cc36f1ef79360d6c4e/exceptiongroup-1.3.1-py3-none-any.whl (16 kB)
+Requirement already satisfied: idna>=2.8 in d:\developer\python\python_3_10_20\lib\site-packages (from anyio<5,>=3.6.2->starlette>=0.46.0->fastapi) (3.18)
+Installing collected packages: websockets, typing-inspection, python-dotenv, pydantic-core, httptools, h11, exceptiongroup, colorama, annotated-types, annotated-doc, pydantic, click, anyio, watchfiles, uvicorn, starlette, pydantic-settings, fastapi
+Successfully installed annotated-doc-0.0.4 annotated-types-0.7.0 anyio-4.14.2 click-8.4.2 colorama-0.4.6 exceptiongroup-1.3.1 fastapi-0.139.2 h11-0.16.0 httptools-0.8.0 pydantic-2.13.4 pydantic-core-2.46.4 pydantic-settings-2.14.2 python-dotenv-1.2.2 starlette-1.3.1 typing-inspection-0.4.2 uvicorn-0.51.0 watchfiles-1.2.0 websockets-16.1.1
+
+[notice] A new release of pip is available: 23.0.1 -> 26.1.2
+[notice] To update, run: python.exe -m pip install --upgrade pip
