@@ -1,0 +1,180 @@
+name: Deploy Claw SaaS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'runtime/**'
+      - 'deploy/**'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'Service to deploy (leave empty for all)'
+        required: false
+        type: string
+
+env:
+  IMAGE_TAG: ${{ github.sha }}
+  ECS_PATH: /opt/claw-saas
+  NAMESPACE: claw-saas
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    if: ${{ !github.event.inputs.service }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: gateway
+            context: backend
+            dockerfile: backend/Dockerfile
+            build-args: SERVICE_NAME=gateway
+          - name: backend-for-frontend
+            context: backend
+            dockerfile: backend/Dockerfile
+            build-args: SERVICE_NAME=backend-for-frontend
+          - name: claw-service
+            context: backend
+            dockerfile: backend/Dockerfile
+            build-args: SERVICE_NAME=claw-service
+          - name: runtime-service
+            context: backend
+            dockerfile: backend/Dockerfile
+            build-args: SERVICE_NAME=runtime-service
+          - name: agent-marketplace-service
+            context: backend
+            dockerfile: backend/Dockerfile
+            build-args: SERVICE_NAME=agent-marketplace-service
+          - name: billing-service
+            context: backend
+            dockerfile: backend/Dockerfile
+            build-args: SERVICE_NAME=billing-service
+          - name: skill-marketplace-service
+            context: backend
+            dockerfile: backend/Dockerfile
+            build-args: SERVICE_NAME=skill-marketplace-service
+          - name: pyclaw-runtime-api
+            context: runtime/pyclaw-runtime-api
+            dockerfile: runtime/pyclaw-runtime-api/Dockerfile
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Login to ACR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.ACR_REGISTRY }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build and push ${{ matrix.name }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.context }}
+          file: ./${{ matrix.dockerfile }}
+          push: true
+          build-args: ${{ matrix.build-args }}
+          tags: ${{ secrets.ACR_REGISTRY }}/clawsaas/${{ matrix.name }}:${{ env.IMAGE_TAG }}
+
+  build-single:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.service }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Login to ACR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.ACR_REGISTRY }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build and push ${{ github.event.inputs.service }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          build-args: SERVICE_NAME=${{ github.event.inputs.service }}
+          tags: ${{ secrets.ACR_REGISTRY }}/clawsaas/${{ github.event.inputs.service }}:${{ env.IMAGE_TAG }}
+
+  deploy:
+    needs: [build-and-push, build-single]
+    if: ${{ !cancelled() && (needs.build-and-push.result == 'success' || needs.build-and-push.result == 'skipped') && (needs.build-single.result == 'success' || needs.build-single.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to ECS K3s
+        env:
+          ACR_REGISTRY: ${{ secrets.ACR_REGISTRY }}
+          ECS_USER: ${{ secrets.ECS_USER }}
+          ECS_HOST: ${{ secrets.ECS_HOST }}
+          ECS_SSH_KEY: ${{ secrets.ECS_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$ECS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 "$ECS_USER@$ECS_HOST" \
+            "bash -s -- '${{ github.ref_name }}' '${{ github.sha }}' '$ACR_REGISTRY' '$IMAGE_TAG' '$ECS_PATH' '$NAMESPACE'" <<'REMOTE'
+          set -euo pipefail
+
+          REF_NAME="$1"
+          COMMIT_SHA="$2"
+          ACR_REGISTRY="$3"
+          IMAGE_TAG="$4"
+          ECS_PATH="$5"
+          NAMESPACE="$6"
+          KUBECONFIG_PATH="/etc/rancher/k3s/k3s.yaml"
+
+          wait_for_k3s() {
+            local attempts="${1:-6}"
+            local delay_seconds="${2:-10}"
+            for i in $(seq 1 "$attempts"); do
+              if sudo /usr/local/bin/k3s kubectl --kubeconfig "$KUBECONFIG_PATH" get nodes --request-timeout=20s >/dev/null 2>&1; then
+                return 0
+              fi
+              echo "k3s apiserver not ready (${i}/${attempts}); waiting ${delay_seconds}s..."
+              sleep "$delay_seconds"
+            done
+            return 1
+          }
+
+          cd "$ECS_PATH"
+          rm -f .git/index.lock
+          git fetch origin "$REF_NAME"
+          git reset --hard "$COMMIT_SHA"
+
+          wait_for_k3s 6 10 || {
+            echo "k3s not responding; restarting k3s..."
+            sudo systemctl restart k3s
+            wait_for_k3s 12 10
+          }
+
+          deploy() {
+            sudo helm --kubeconfig "$KUBECONFIG_PATH" upgrade --install claw-saas ./deploy/helm/claw-saas \
+              -n "$NAMESPACE" \
+              --create-namespace \
+              --set global.imagePullSecret=aliyun-acr-pull-secret \
+              --set global.secretName=claw-saas-secret \
+              --set gateway.image.tag="$IMAGE_TAG" \
+              --set backend-for-frontend.image.tag="$IMAGE_TAG" \
+              --set claw-service.image.tag="$IMAGE_TAG" \
+              --set runtime-service.image.tag="$IMAGE_TAG" \
+              --set agent-marketplace-service.image.tag="$IMAGE_TAG" \
+              --set billing-service.image.tag="$IMAGE_TAG" \
+              --set skill-marketplace-service.image.tag="$IMAGE_TAG" \
+              --set pyclaw-runtime-api.image.tag="$IMAGE_TAG" \
+              --timeout 10m
+          }
+
+          if ! deploy; then
+            echo "helm deploy failed; retrying once..."
+            wait_for_k3s 12 10
+            deploy
+          fi
+          REMOTE
