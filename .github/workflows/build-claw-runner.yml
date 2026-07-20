@@ -1,4 +1,4 @@
-name: Build sandbox runner
+name: Build Claw Runner
 
 on:
   push:
