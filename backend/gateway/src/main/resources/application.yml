@@ -1,5 +1,16 @@
 spring:
   application:
     name: gateway
+
 server:
   port: 8080
+
+gateway:
+  security:
+    jwt-secret: change-me-in-production
+    jwt-ttl-seconds: 3600
+    bootstrap-admin-username: admin
+    bootstrap-admin-password: ChangeMe123!
+    encryption-secret: ""
+  runtime:
+    internal-token: change-me-in-production
