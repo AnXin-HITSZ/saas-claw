@@ -148,7 +148,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
   <modules>
     <module>gateway</module>
     <module>backend-for-frontend</module>
-    <module>conversation-service</module>
+    <module>claw-service</module>
     <module>runtime-service</module>
     <module>agent-marketplace-service</module>
     <module>billing-service</module>
@@ -532,24 +532,24 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 ---
 
-### Task 5: Conversation-service shell
+### Task 5: Claw-service shell
 
 **Files:**
-- Create: `backend/conversation-service/pom.xml`
-- Create: `backend/conversation-service/src/main/java/com/clawsaas/conversation/ConversationServiceApplication.java`
-- Create: `backend/conversation-service/src/main/resources/application.yml`
-- Create: `backend/conversation-service/src/main/java/com/clawsaas/conversation/config/package-info.java`
-- Create: `backend/conversation-service/src/main/java/com/clawsaas/conversation/exception/GlobalExceptionHandler.java`
+- Create: `backend/claw-service/pom.xml`
+- Create: `backend/claw-service/src/main/java/com/clawsaas/claw/ClawServiceApplication.java`
+- Create: `backend/claw-service/src/main/resources/application.yml`
+- Create: `backend/claw-service/src/main/java/com/clawsaas/claw/config/package-info.java`
+- Create: `backend/claw-service/src/main/java/com/clawsaas/claw/exception/GlobalExceptionHandler.java`
 
 **Consumes:** `backend/pom.xml` (parent POM)
-**Produces:** Conversation service compiles as a Spring Web MVC + JPA application on port 8082.
+**Produces:** Claw service compiles as a Spring Web MVC + JPA application on port 8082. Manages Claw instances, conversations, messages, Agent install/config — pure DB CRUD, no OSS or file operations.
 
 - [ ] **Step 1: Create directories and write pom.xml**
 
 ```bash
-mkdir -p backend/conversation-service/src/main/java/com/clawsaas/conversation/config
-mkdir -p backend/conversation-service/src/main/java/com/clawsaas/conversation/exception
-mkdir -p backend/conversation-service/src/main/resources
+mkdir -p backend/claw-service/src/main/java/com/clawsaas/claw/config
+mkdir -p backend/claw-service/src/main/java/com/clawsaas/claw/exception
+mkdir -p backend/claw-service/src/main/resources
 ```
 
 ```xml
@@ -566,9 +566,9 @@ mkdir -p backend/conversation-service/src/main/resources
     <relativePath>../pom.xml</relativePath>
   </parent>
 
-  <artifactId>conversation-service</artifactId>
-  <name>claw-saas-conversation-service</name>
-  <description>Conversation service — threads, messages, Claw/Agent instance management</description>
+  <artifactId>claw-service</artifactId>
+  <name>claw-saas-claw-service</name>
+  <description>Claw service — Claw instances, conversations, messages, Agent install/config (DB CRUD only)</description>
 
   <dependencies>
     <dependency>
@@ -628,19 +628,19 @@ mkdir -p backend/conversation-service/src/main/resources
 </project>
 ```
 
-- [ ] **Step 2: Write ConversationServiceApplication.java**
+- [ ] **Step 2: Write ClawServiceApplication.java**
 
 ```java
-package com.clawsaas.conversation;
+package com.clawsaas.claw;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class ConversationServiceApplication {
+public class ClawServiceApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(ConversationServiceApplication.class, args);
+        SpringApplication.run(ClawServiceApplication.class, args);
     }
 }
 ```
@@ -650,7 +650,7 @@ public class ConversationServiceApplication {
 ```yaml
 spring:
   application:
-    name: conversation-service
+    name: claw-service
 server:
   port: 8082
 ```
@@ -659,21 +659,21 @@ server:
 
 ```java
 /**
- * Conversation service configuration.
+ * Claw service configuration.
  *
- * Phase 2 will add: DataSourceConfig, JpaConfig, FlywayConfig, OssClientConfig.
+ * Phase 2 will add: DataSourceConfig, JpaConfig, FlywayConfig.
  */
-package com.clawsaas.conversation.config;
+package com.clawsaas.claw.config;
 ```
 
 - [ ] **Step 5: Write GlobalExceptionHandler.java**
 
-Same structure as gateway's handler (see Task 3 Step 5). Change package to `com.clawsaas.conversation.exception`.
+Same structure as gateway's handler (see Task 3 Step 5). Change package to `com.clawsaas.claw.exception`.
 
 - [ ] **Step 6: Verify compiles**
 
 ```bash
-cd backend && mvn -pl conversation-service validate
+cd backend && mvn -pl claw-service validate
 ```
 
 Expected: BUILD SUCCESS
@@ -681,8 +681,10 @@ Expected: BUILD SUCCESS
 - [ ] **Step 7: Commit**
 
 ```bash
-git add backend/conversation-service/
-git commit -m "chore: add conversation-service shell (8082, Web MVC + JPA)
+git add backend/claw-service/
+git commit -m "chore: add claw-service shell (8082, Web MVC + JPA)
+
+Claw instances, conversations, Agent installs — DB CRUD only, no OSS.
 
 Co-Authored-By: Claude <noreply@anthropic.com>"
 ```
@@ -711,7 +713,7 @@ mkdir -p backend/runtime-service/src/main/resources
 
 - [ ] **Step 2: Write pom.xml**
 
-Same dependencies as conversation-service (Web, JPA, Validation, Actuator, Flyway, H2, PostgreSQL, MySQL). The HTTP client for FastAPI calls uses Spring's `RestTemplate` from `spring-boot-starter-web` — no extra dependency needed in the skeleton.
+Same dependencies as claw-service (Web, JPA, Validation, Actuator, Flyway, H2, PostgreSQL, MySQL). The HTTP client for FastAPI calls uses Spring's `RestTemplate` from `spring-boot-starter-web` — no extra dependency needed in the skeleton.
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -874,7 +876,7 @@ mkdir -p backend/agent-marketplace-service/src/main/resources
 
 - [ ] **Step 2: Write pom.xml**
 
-Same JPA dependencies as conversation-service, plus OSS SDK:
+Same JPA dependencies as claw-service, plus OSS SDK:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -1101,7 +1103,7 @@ mkdir -p backend/billing-service/src/main/java/com/clawsaas/billing/exception
 mkdir -p backend/billing-service/src/main/resources
 ```
 
-Pom dependencies: same JPA stack as conversation-service (Web, JPA, Validation, Actuator, Flyway, H2, PostgreSQL, MySQL). No OSS needed.
+Pom dependencies: same JPA stack as claw-service (Web, JPA, Validation, Actuator, Flyway, H2, PostgreSQL, MySQL). No OSS needed.
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -1805,7 +1807,7 @@ docs/superpowers/plans/2026-07-19-claw-saas-skeleton-plan.md       阶段一计�
 |------|------|------|
 | gateway | 8080 | Spring Cloud Gateway (WebFlux) |
 | backend-for-frontend | 8081 | Spring Web MVC |
-| conversation-service | 8082 | Spring Web MVC + JPA |
+| claw-service | 8082 | Spring Web MVC + JPA |
 | runtime-service | 8083 | Spring Web MVC + JPA |
 | agent-marketplace-service | 8084 | Spring Web MVC + JPA + OSS |
 | billing-service | 8085 | Spring Web MVC + JPA |
@@ -1818,7 +1820,7 @@ docs/superpowers/plans/2026-07-19-claw-saas-skeleton-plan.md       阶段一计�
 阶段一骨架已搭建完毕。阶段二按以下顺序迁移业务代码：
 
 ```text
-1. conversation-service
+1. claw-service
 2. runtime-service
 3. agent-marketplace-service
 4. skill-marketplace-service
