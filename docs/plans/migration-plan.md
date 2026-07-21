@@ -104,9 +104,9 @@ claw-runner 当前 workspace 平铺，缺少 `.claw/` 元数据目录：
 
 需要：`POST /v1/claw/init` 接口 + SandboxOrchestrator 调用。
 
-### 5. InternalServiceAuthFilter 清理
+### 5. InternalServiceAuthFilter 清理 ✅
 
-Gateway 中的 `InternalServiceAuthFilter.java` 已失效（服务间走 ClusterIP 直连，不经过 Gateway）。应删除或重构。
+Gateway 中的 `InternalServiceAuthFilter.java` 已删除。三个 `/api/internal/` 端点中，有两个走 ClusterIP 直连（不经过 Gateway），一个在 Gateway 自身且控制器已有独立 token 校验。Filter 完全不会触发，属废代码。
 
 ### 6. 前端适配
 

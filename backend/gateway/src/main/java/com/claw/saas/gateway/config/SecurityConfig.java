@@ -24,8 +24,7 @@ public class SecurityConfig {
 
     @Bean
     SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http,
-                                                   BearerAuthenticationFilter bearerFilter,
-                                                   InternalServiceAuthFilter internalAuthFilter) {
+                                                   BearerAuthenticationFilter bearerFilter) {
         return http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .authorizeExchange(exchanges -> exchanges
@@ -37,16 +36,13 @@ public class SecurityConfig {
                                 "/api/auth/register",
                                 "/api/webhooks/wechat",
                                 "/api/webhooks/feishu",
-                                "/api/internal/agents/**",
                                 "/api/internal/route-bindings/**",
-                                "/api/internal/orchestrator/**",
                                 "/actuator/health",
                                 "/healthz"
                         ).permitAll()
                         .pathMatchers(HttpMethod.OPTIONS).permitAll()
                         .anyExchange().authenticated()
                 )
-                .addFilterBefore(internalAuthFilter, SecurityWebFiltersOrder.AUTHENTICATION)
                 .addFilterBefore(bearerFilter, SecurityWebFiltersOrder.AUTHENTICATION)
                 .build();
     }
@@ -54,10 +50,5 @@ public class SecurityConfig {
     @Bean
     BearerAuthenticationFilter bearerAuthenticationFilter(JwtService jwtService, UserRepository users) {
         return new BearerAuthenticationFilter(jwtService, users);
-    }
-
-    @Bean
-    InternalServiceAuthFilter internalServiceAuthFilter(RuntimeProperties runtimeProperties) {
-        return new InternalServiceAuthFilter(runtimeProperties.internalToken());
     }
 }
