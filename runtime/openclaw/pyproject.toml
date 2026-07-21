@@ -11,3 +11,13 @@ dependencies = [
 dev = [
     "pytest>=8.0",
 ]
+
+[tool.setuptools.packages.find]
+include = [
+    "agent*",
+    "config*",
+    "guards*",
+    "llm*",
+    "session*",
+    "tools*",
+]
