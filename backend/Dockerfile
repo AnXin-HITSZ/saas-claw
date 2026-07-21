@@ -17,7 +17,7 @@ RUN mvn -q dependency:go-offline -pl ${SERVICE_NAME}
 
 # Copy sources and build the target module
 COPY . .
-RUN mvn -q -DskipTests package -pl ${SERVICE_NAME}
+RUN mvn -q -DskipTests package spring-boot:repackage -pl ${SERVICE_NAME}
 
 # Runtime stage
 FROM eclipse-temurin:17-jre
