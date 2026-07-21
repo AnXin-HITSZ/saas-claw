@@ -116,6 +116,10 @@ Gateway 中的 `InternalServiceAuthFilter.java` 保留。三个 `/api/internal/`
 
 `spring-backend/src/main/resources/db/migration/V1__agent_marketplace_base.sql` 已被删除。原 migration SQL 已合并到 `agent-marketplace-service` 的 Flyway 目录中。部署时需确认数据库迁移正常执行。
 
+### 8. 工具审批风险阈值可配置
+
+control-plane 中工具审批决策硬编码 `risk == "low"`。设计方案：改为可配置阈值，用户可从前端选择严格程度。详见 [tool-approval-threshold-design.md](tool-approval-threshold-design.md)。
+
 ---
 
 ## ECS 初始部署步骤
