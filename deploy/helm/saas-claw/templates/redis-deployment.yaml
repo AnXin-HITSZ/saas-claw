@@ -30,6 +30,8 @@ spec:
         app.kubernetes.io/name: redis
         app.kubernetes.io/part-of: saas-claw
     spec:
+      imagePullSecrets:
+        - name: {{ .Values.global.imagePullSecret }}
       containers:
         - name: redis
           image: "{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
