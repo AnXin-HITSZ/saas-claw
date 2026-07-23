@@ -155,13 +155,31 @@ jobs:
             wait_for_k3s 12 10
           }
 
+          echo "== Cleanup previous bootstrap job =="
+          sudo /usr/local/bin/k3s kubectl --kubeconfig "$KUBECONFIG_PATH" -n "$NAMESPACE" \
+            delete job saas-claw-mysql-bootstrap-databases --ignore-not-found
+
           echo "== Deploy MySQL =="
+          set +e
           sudo helm --kubeconfig "$KUBECONFIG_PATH" upgrade --install saas-claw-mysql ./deploy/helm/saas-claw-mysql \
             -n "$NAMESPACE" \
             --create-namespace \
             -f saas-claw-mysql-values-k3s.yaml \
             --set imagePullSecrets[0].name=aliyun-acr-pull-secret \
-            --timeout 10m
+            --timeout 15m &
+          helm_pid=$!
+          set -e
+
+          while kill -0 "${helm_pid}" 2>/dev/null; do
+            echo "$(date -Is) waiting for saas-claw-mysql helm upgrade..."
+            sleep 30
+          done
+          wait "${helm_pid}"
+
+          echo "== Verify MySQL databases =="
+          sudo /usr/local/bin/k3s kubectl --kubeconfig "$KUBECONFIG_PATH" -n "$NAMESPACE" \
+            exec statefulset/saas-claw-mysql -- \
+            sh -c 'mysql -h 127.0.0.1 -usaas_claw -p"$MYSQL_PASSWORD" -e "show databases;"'
 
           deploy() {
             sudo helm --kubeconfig "$KUBECONFIG_PATH" upgrade --install saas-claw ./deploy/helm/saas-claw \
