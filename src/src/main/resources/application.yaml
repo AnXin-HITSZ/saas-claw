@@ -6,6 +6,24 @@ spring:
     name: src
   main:
     web-application-type: reactive
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:3306/${DB_NAME:test}?useSSL=false&serverTimezone=Asia/Shanghai
+    username: ${DB_USER:root}
+    password: ${DB_PASS:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      minimum-idle: 2
+      maximum-pool-size: 10
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: 6379
+      password: ${REDIS_PASS:}
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 20
+          max-idle: 5
   cloud:
     gateway:
       server:
@@ -15,3 +33,8 @@ spring:
               uri: http://localhost:8859
               predicates:
                 - Path=/**
+
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl   # 控制台打印 SQL
+    map-underscore-to-camel-case: true                       # 下划线转驼峰

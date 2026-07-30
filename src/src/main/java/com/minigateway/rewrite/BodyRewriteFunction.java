@@ -1,17 +1,24 @@
 package com.minigateway.rewrite;
 
-import com.minigateway.utils.AvailableModelNames;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.minigateway.entity.ModelConfig;
+import com.minigateway.mapper.ModelConfigMapper;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.reactivestreams.Publisher;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.gateway.filter.factory.rewrite.RewriteFunction;
 import org.springframework.http.HttpStatus;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -19,7 +26,24 @@ import java.util.regex.Pattern;
 @Component
 public class BodyRewriteFunction implements RewriteFunction<byte[], byte[]> {
     @Autowired
-    private AvailableModelNames availableModelNames;
+    private ModelConfigMapper modelConfigMapper;
+
+    private Set<String> supportedModels = ConcurrentHashMap.newKeySet();
+
+    @PostConstruct
+    public void init() {
+        refreshModels();
+    }
+
+    @Scheduled(cron = "0 0/3 * * * ?")
+    public void refreshModels() {
+        List<ModelConfig> models = modelConfigMapper.selectList(
+                new LambdaQueryWrapper<ModelConfig>().eq(ModelConfig::getStatus, 1)
+        );
+        supportedModels.clear();
+        models.forEach(m -> supportedModels.add(m.getModelName()));
+        log.info("refreshed model list: {}", supportedModels);
+    }
 
     @Override
     public Publisher<byte[]> apply(ServerWebExchange exchange, byte[] bytes) {
@@ -33,7 +57,7 @@ public class BodyRewriteFunction implements RewriteFunction<byte[], byte[]> {
 
         long eTokens = estimateTokens(body);
 
-        if (!availableModelNames.getAvailableModelNames().contains(modelName)) {
+        if (!supportedModels.contains(modelName)) {
             log.error("model {} is not supported", modelName);
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "model " + modelName + " is not supported");
         }
