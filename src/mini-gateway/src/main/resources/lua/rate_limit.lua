@@ -1,7 +1,6 @@
-local currentWindowIndex = tonumber(ARGV[1])
-local incrementValue = tonumber(ARGV[2])
-local limit = tonumber(ARGV[3])
-local currentWindowWeight = tonumber(ARGV[4])
+local incrementValue = tonumber(ARGV[1])
+local limit = tonumber(ARGV[2])
+local currentWindowWeight = tonumber(ARGV[3])
 
 local totalCount = 0
 

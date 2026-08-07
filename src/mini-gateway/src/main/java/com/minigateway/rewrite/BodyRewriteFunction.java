@@ -54,8 +54,10 @@ public class BodyRewriteFunction implements RewriteFunction<byte[], byte[]> {
             log.error("model is required");
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "model is required");
         }
+        exchange.getAttributes().put("modelName", modelName);
 
         long eTokens = estimateTokens(body);
+        exchange.getAttributes().put("estimatedTokens", eTokens);
 
         if (!supportedModels.contains(modelName)) {
             log.error("model {} is not supported", modelName);
@@ -65,7 +67,7 @@ public class BodyRewriteFunction implements RewriteFunction<byte[], byte[]> {
         String requestId = exchange.getAttributes().get("requestId").toString();
         long startTime = Long.parseLong(exchange.getAttributes().get("startTime").toString());
 
-        String newBody = injectFields(body, requestId, startTime, eTokens);
+        String newBody = injectFields(body, requestId, startTime, modelName, eTokens);
 
         return Mono.just(newBody.getBytes(StandardCharsets.UTF_8));
     }
@@ -84,7 +86,7 @@ public class BodyRewriteFunction implements RewriteFunction<byte[], byte[]> {
         return (long) (bodyStr.length() * 0.5);
     }
 
-    private String injectFields(String bodyStr, String requestId, long startTime, long tokens) {
+    private String injectFields(String bodyStr, String requestId, long startTime, String modelName, long tokens) {
         int lastBrace = bodyStr.lastIndexOf('}');
         if (lastBrace == -1) return bodyStr;
 
@@ -92,6 +94,7 @@ public class BodyRewriteFunction implements RewriteFunction<byte[], byte[]> {
                 .append(bodyStr, 0, lastBrace)
                 .append(",\"requestId\":\"").append(requestId).append("\"")
                 .append(",\"requestTime\":").append(startTime)
+                .append(",\"modelName\":\"").append(modelName).append("\"")
                 .append(",\"estimatedTokens\":").append(tokens)
                 .append('}')
                 .toString();

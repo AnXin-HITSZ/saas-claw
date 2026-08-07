@@ -30,6 +30,15 @@ public class RequestIdFilter implements GlobalFilter, Ordered {
 
         String clientIp = getClientIp(exchange.getRequest());
 
+        String productCode = exchange.getRequest().getHeaders().getFirst("Product-Code");
+        String deviceSn = exchange.getRequest().getHeaders().getFirst("Device-Sn");
+        if (productCode != null && !productCode.isEmpty()) {
+            exchange.getAttributes().put("productCode", productCode);
+        }
+        if (deviceSn != null && !deviceSn.isEmpty()) {
+            exchange.getAttributes().put("deviceSn", deviceSn);
+        }
+
         ServerHttpRequest modifiedRequest = exchange.getRequest().mutate()
                 .header("X-Forwarded-For", clientIp)
                 .header("X-Request-Id", requestId)

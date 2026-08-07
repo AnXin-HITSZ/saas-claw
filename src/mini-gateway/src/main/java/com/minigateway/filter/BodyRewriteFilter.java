@@ -19,7 +19,6 @@ public class BodyRewriteFilter implements GlobalFilter, Ordered {
     @Autowired
     private BodyRewriteFunction bodyRewriteFunction;
 
-
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         return modifyRequestBodyFilter
