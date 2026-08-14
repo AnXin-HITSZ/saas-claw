@@ -74,11 +74,14 @@
 | GET/POST /claws | - | Claw 管理 |
 | POST /claws/{id}/deploy | - | 部署（K8s 协调） |
 | GET/POST /agents | - | Agent 管理 |
-| POST /agents/{id}/files | 上传人格文件（multipart）→ OSS + 写 agent_file |
-| PUT /agents/{id}/files/{name} | 编辑已有人格文件（覆盖内容） |
-| GET /agents/{id}/files | 查看人格文件列表 |
+| POST /agents/{id}/files | - | 上传人格文件（multipart）→ OSS + 写 agent_file |
+| PUT /agents/{id}/files/{name} | - | 编辑已有人格文件（覆盖内容） |
+| GET /agents/{id}/files | - | 查看人格文件列表 |
 | GET/POST /skills | - | Skill 管理（含文件上传） |
 | POST /skills/{id}/files | - | 上传 SKILL.md / 脚本 → OSS |
+| GET/POST /model-configs | - | 模型配置列表/创建（api_key 仅写入不回显）|
+| PUT /model-configs/{id} | - | 更新模型配置（endpoint / api_key / status）|
+| DELETE /model-configs/{id} | - | 删除模型配置（软删 status=0）|
 | POST /shop/agents/{id}/publish | - | Agent 发布上架（写 agent_shop 表） |
 | DELETE /shop/agents/{id} | - | Agent 下架（status=0） |
 | POST /shop/skills/{id}/publish | - | Skill 发布上架（写 skill_shop 表） |

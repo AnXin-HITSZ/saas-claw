@@ -24,13 +24,23 @@
 | :--: | :--: | :--: |
 | GET/POST /claws | Claw 列表/创建 | 创建返回 `{id, namespace}` |
 | POST /claws/{id}/deploy | 部署 | 异步：返回任务状态，K8s 协调完成后可查 |
+| GET/POST /model-configs | 模型配置列表/创建 | 创建 body: {name, provider, model_name, endpoint, api_key}；409 name 已存在 |
+| PUT /model-configs/{id} | 更新模型配置 | endpoint / api_key / status |
+| DELETE /model-configs/{id} | 删除模型配置 | 软删（status=0）|
 | GET/POST /agents | Agent 列表/创建 | 创建参数含 `alias`，409 alias 已存在 |
-| PUT /agents/{id} | 更新人设/参数 | |
+| PUT /agents/{id} | 更新 system_prompt/参数 | |
+| POST /agents/{id}/files | 上传人格文件 | multipart（AGENTS.md / IDENTITY.md / SOUL.md），写 agent_file + OSS |
+| PUT /agents/{id}/files/{name} | 编辑已有人格文件 | 覆盖内容，返回 file_url |
+| GET /agents/{id}/files | 查看人格文件列表 | 返回 {list} |
 | GET/POST /skills | Skill 列表/创建 | |
 | POST /skills/{id}/files | 上传文件 | multipart，返回 file_url |
 | POST /shop/agents/{id}/publish | 上架 Agent | |
 | DELETE /shop/agents/{id} | 下架 Agent | 软删 |
+| GET /shop/agents | 商店浏览 Agent | 分页，返回 {list} |
 | POST /shop/agents/{id}/install | 安装 Agent | query: `claw_id` |
+| POST /shop/skills/{id}/publish | 上架 Skill | |
+| DELETE /shop/skills/{id} | 下架 Skill | 软删 |
+| GET /shop/skills | 商店浏览 Skill | 分页，返回 {list} |
 | POST /shop/skills/{id}/install | 安装 Skill | |
 | PUT /approvals/{requestId} | 审批回写 | body: `{action: 1/2/3, custom_message?}` |
 
@@ -54,5 +64,6 @@
 
 1. **`model` 字段 = agent.alias**：程序调用 Agent 的唯一标识，用户级唯一（uk_user_alias）
 2. **推理接口不区分来源**：网页/程序同一条通道，仅凭证不同（见 runtime.md）
-3. **审批回写是唯一"前端直改后端状态"的接口**：其余管理操作均走完整 CRUD
+3. **审批回写是唯一不经 CRUD 体系的前端状态直写**：其余管理操作均走完整 CRUD
 4. **429 限流**：网关限流命中统一返回 429 + Retry-After
+5. **模型密钥不进前端**：model_config.api_key 创建/更新时写入，列表与详情接口返回遮蔽值（如 `sk-****`），前端永不回显明文

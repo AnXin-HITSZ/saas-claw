@@ -12,21 +12,32 @@
 
 ## 页面规划
 
-| 页面 | 路由 | 功能 |
+| 页面 | 路由 | 功能 | 访问控制 |
+| :--: | :--: | :--: | :--: |
+| 主介绍页 | / | 平台介绍、工作台入口 | 公开 |
+| 登录/注册 | /login | JWT 登录、注册 | 公开 |
+| 工作台 | /workspace | Claw 列表、创建/删除 Claw | 需登录 |
+| Claw 详情 | /claws/:id | 该 Claw 的 Agent 列表、入口 | 需登录 |
+| Agent 管理 | /claws/:id/agents | Agent CRUD、人设/参数配置 | 需登录 |
+| 对话页 | /chat/:agentId | Agent 对话（SSE 流式渲染）| 需登录 |
+| Skill 管理 | /skills | Skill CRUD、文件上传 | 需登录 |
+| 商店 | /shop | Agent/Skill 浏览、安装 | 需登录 |
+| API Key 管理 | /settings/api-keys | 生成/吊销 sk-xxx | 需登录 |
+
+## 布局
+
+两套布局，按登录态切换：
+
+| 布局 | 覆盖页面 | 顶栏 |
 | :--: | :--: | :--: |
-| 登录/注册 | /login | JWT 登录、注册 |
-| 工作台 | / | Claw 列表、创建/删除 Claw |
-| Claw 详情 | /claws/:id | 该 Claw 的 Agent 列表、入口 |
-| Agent 管理 | /claws/:id/agents | Agent CRUD、人设/参数配置 |
-| 对话页 | /chat/:agentId | Agent 对话（SSE 流式渲染）|
-| Skill 管理 | /skills | Skill CRUD、文件上传 |
-| 商店 | /shop | Agent/Skill 浏览、安装 |
-| API Key 管理 | /settings/api-keys | 生成/吊销 sk-xxx |
+| 公开布局 | `/`、`/login` | Logo、登录/注册按钮 |
+| 应用布局 | 工作台起所有页面 | Logo（点击回工作台）、主导航、用户菜单 |
 
 ## 全局组件
 
 | 组件 | 用途 |
 | :--: | :--: |
+| 应用布局 | 登录后各页的导航框架（顶栏 + 内容区） |
 | 审批弹窗 | 监听 WebSocket 推送，敏感工具审批（允许/拒绝/自定义）|
 | 对话消息流 | SSE 流式接收并渲染 Agent 回复 |
 
@@ -49,4 +60,4 @@
 * **状态管理**：Pinia（用户信息、当前 Claw、待审批队列）
 * **流式渲染**：SSE 增量拼接，打字机效果
 * **审批弹窗为全局单例**：任何页面收到推送都能弹出
-* **路由守卫**：未登录跳转 /login
+* **路由守卫**：公开路由 `/`、`/login`，其余需登录；未登录访问受保护页 → `/login`（带 `redirect` 参数，登录成功回跳）；已登录访问 `/` → 重定向 `/workspace`

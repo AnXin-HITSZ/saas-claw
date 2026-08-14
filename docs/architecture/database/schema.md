@@ -25,12 +25,13 @@ CREATE TABLE user (
     nickname      VARCHAR(64)  DEFAULT NULL,
     email         VARCHAR(128) DEFAULT NULL,
     avatar_url    VARCHAR(255) DEFAULT NULL,
-    org_id        BIGINT       DEFAULT NULL,      -- 预留：MVP 为 null，未来组织成员时填
-    status        TINYINT      DEFAULT 1,         -- 1=正常 0=禁用
+    org_id        BIGINT       DEFAULT NULL,              -- 预留：MVP 为 null，未来组织成员时填
+    status        TINYINT      DEFAULT 1,                 -- 1=正常 0=禁用
+    role          TINYINT      NOT NULL      DEFAULT 0,   -- 0=普通用户 1=管理员
     created_at    DATETIME     DEFAULT CURRENT_TIMESTAMP,
-    updated_at    DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    updated_at    DATETIME     DEFAULT CURRENT_TIMESTAMP  ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uk_username (username),
-    INDEX idx_org_id (org_id)                     -- 预留索引
+    INDEX idx_org_id (org_id)                             -- 预留索引
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';
 ```
 
@@ -41,6 +42,8 @@ CREATE TABLE authorization (
     id         BIGINT       PRIMARY KEY AUTO_INCREMENT,
     user_id    BIGINT       NOT NULL,             -- 改为绑定用户，不是组织
     api_key    VARCHAR(128) NOT NULL,
+    name       VARCHAR(64)  DEFAULT NULL,          -- 创建时用户起的名称（主标识，可重名）
+    key_suffix VARCHAR(8)   DEFAULT NULL,          -- 明文 key 末 6 位（同名时辅助分辨）
     status     TINYINT      DEFAULT 1,
     created_at DATETIME     DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -131,7 +134,7 @@ CREATE TABLE tool (
     name         VARCHAR(64)  NOT NULL,
     description  VARCHAR(512) DEFAULT NULL,
     schema_json  TEXT,                       -- 工具入参定义（JSON Schema）
-    sensitive    TINYINT      DEFAULT 0,     -- 1=敏感（触发审批）0=普通
+    is_sensitive TINYINT      DEFAULT 0,     -- 1=敏感（触发审批）0=普通
     status       TINYINT      DEFAULT 1,
     created_at   DATETIME     DEFAULT CURRENT_TIMESTAMP,
     updated_at   DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -217,18 +220,6 @@ CREATE TABLE agent_skill (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Agent-Skill依赖表';
 ```
 
-## agent_tool 表（Agent - Tool 绑定表）
-
-```sql
-CREATE TABLE agent_tool (
-    id         BIGINT       PRIMARY KEY AUTO_INCREMENT,
-    agent_id   BIGINT       NOT NULL,
-    tool_id    BIGINT       NOT NULL,
-    created_at DATETIME     DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY uk_agent_tool (agent_id, tool_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Agent-Tool绑定表';
-```
-
 ## tool_approval 表（敏感工具审批留痕）
 
 ```sql
@@ -242,9 +233,8 @@ CREATE TABLE tool_approval (
     input_summary  VARCHAR(512) DEFAULT NULL,   -- 入参摘要（展示给用户看的关键信息）
     action         TINYINT      DEFAULT NULL,   -- 1=允许 2=拒绝 3=自定义消息
     custom_message VARCHAR(512) DEFAULT NULL,   -- action=3 时用户改写的内容
-    status         TINYINT      DEFAULT 0,      -- 0=待审批 1=已处理 2=已过期
+    status         TINYINT      DEFAULT 0,      -- 0=待审批 1=已处理
     created_at     DATETIME     DEFAULT CURRENT_TIMESTAMP,
-    expires_at     DATETIME     DEFAULT NULL,
     handled_at     DATETIME     DEFAULT NULL,   -- 处理时间（留痕审计用）
     UNIQUE KEY uk_request (request_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='工具审批留痕表';
@@ -261,6 +251,7 @@ CREATE TABLE agent_installation (
     local_agent_id BIGINT       DEFAULT NULL,   -- 安装后本地副本（source='shop'）
     status         TINYINT      DEFAULT 1,
     created_at     DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    updated_at     DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Agent安装记录表';
 ```

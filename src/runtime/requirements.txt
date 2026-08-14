@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+pydantic-settings
+python-dotenv
+langgraph
+redis
+langchain
+langchain-openai
+sqlalchemy
+pymysql
+oss2
+httpx
+langgraph-checkpoint-redis

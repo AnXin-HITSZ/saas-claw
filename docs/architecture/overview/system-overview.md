@@ -14,7 +14,7 @@ Agent 运行时可以使用工具，涉及到敏感工具时，需要弹窗给�
 
 平台由以下组件构成。
 
-**网关（mini-gateway）**
+**网关（gateway）**
 
 网关主要负责认证鉴权、限流控制、并发控制，通过校验后将请求转发到相应 uri。
 
@@ -39,7 +39,7 @@ flowchart LR
         P["程序客户端<br/>api_key + model=alias"]
     end
     subgraph 平台层
-        G["网关 mini-gateway"]
+        G["网关 gateway"]
         B["后端 SpringBoot"]
         DB[("MySQL")]
         OSS["OSS 对象存储"]
@@ -164,7 +164,7 @@ flowchart TB
     MySQL["MySQL"]
 
     subgraph 平台层
-        G["网关 Service: mini-gateway"]
+        G["网关 Service: gateway"]
         B["后端 Service: backend"]
     end
 
@@ -205,7 +205,7 @@ flowchart TB
 
 | 组件 | 位置 | 说明 |
 |------|------|------|
-| 网关 mini-gateway | K3s 集群内（平台层）| 须在集群内，才能解析 Claw Pod 的 Service DNS |
+| 网关 gateway | K3s 集群内（平台层）| 须在集群内，才能解析 Claw Pod 的 Service DNS |
 | 后端 backend | K3s 集群内（平台层）| 管理接口、Claw 创建、审批回写 |
 | Claw Pod | 各自 `claw-{id}` namespace | 每 Claw 一个常驻实例，可横向扩展 |
 | 沙箱 Job | Claw 所在 namespace | 一次性，跑完即删 |
