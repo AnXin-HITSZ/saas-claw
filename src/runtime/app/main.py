@@ -26,6 +26,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
 from pydantic import BaseModel
 from redis import asyncio as aioredis
+from typing import Any, AsyncIterator
 
 from .checkpointer import saver
 from .config import settings
@@ -90,7 +91,7 @@ def _to_business_message(m: BaseMessage) -> dict:
     return {"role": m.type, "content": content}
 
 
-async def _sse_stream(stream, config: RunnableConfig):
+async def _sse_stream(stream: AsyncIterator[tuple[str, Any]], config: RunnableConfig) -> AsyncIterator[str]:
     """把 graph.astream 的 (mode, chunk) 转成 SSE；messages 增量 → choices，interrupt → __interrupt__。
 
     审批挂起时把 request_id → config 记入 registry，供 /approvals/callback 恢复。
@@ -118,9 +119,9 @@ def _conv_list_key() -> str:
 
 async def _touch_conversation(conversation_id: str) -> None:
     """首次见到的会话登记进列表；已有则跳过（HSETNX 幂等）。"""
-    created = await _kv.hsetnx(f"conv:index:{settings.claw_id}", conversation_id, "{}")
+    created = await _kv.hsetnx(_conv_index_key(), conversation_id, "{}")
     if created:
-        await _kv.lpush(f"conv:list:{settings.claw_id}", conversation_id)
+        await _kv.lpush(_conv_list_key(), conversation_id)
 
 
 async def _update_conversation_meta(conversation_id: str) -> dict | None:
@@ -218,10 +219,10 @@ async def approvals_callback(body: ApprovalCallbackBody) -> StreamingResponse:
 
 @app.get("/v1/conversations")
 async def list_conversations() -> dict:
-    ids = await _kv.lrange(f"conv:list:{settings.claw_id}", 0, -1)
+    ids = await _kv.lrange(_conv_list_key(), 0, -1)
     if not ids:
         return {"list": []}
-    metas = await _kv.hmget(f"conv:index:{settings.claw_id}", ids)
+    metas = await _kv.hmget(_conv_index_key(), ids)
     items = []
     for cid, raw in zip(ids, metas):
         if raw:
