@@ -8,8 +8,8 @@ WORKDIR /app
 
 RUN corepack enable
 
-# 先拷锁文件装依赖（含 devDependencies，vite/vue-tsc 构建期需要）
-COPY package.json pnpm-lock.yaml ./
+# 先拷锁文件与 pnpm 设置装依赖（含 devDependencies；pnpm-workspace.yaml 需在 install 前到位，否则 onlyBuiltDependencies 失效）
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
 # 再拷源码构建（pnpm build = vue-tsc --noEmit && vite build）

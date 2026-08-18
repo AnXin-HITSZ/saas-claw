@@ -1,0 +1,4 @@
+# pnpm 11 设置迁移到 pnpm-workspace.yaml（package.json 的 pnpm 字段已不再读取）
+# 放行 esbuild 的 postinstall：vite 构建必须执行其安装脚本（平台二进制）
+onlyBuiltDependencies:
+  - esbuild
