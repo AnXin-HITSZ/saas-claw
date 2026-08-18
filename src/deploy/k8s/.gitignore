@@ -1,0 +1,4 @@
+# 部署密钥实体文件不入库（仅提交 *.example.yaml 模板）
+01-secret.yaml
+*-secret.yaml
+!*-secret.example.yaml
