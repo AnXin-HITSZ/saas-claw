@@ -37,7 +37,8 @@ public class JwtUtil {
                     .parseSignedClaims(token)
                     .getPayload();
             return Long.valueOf(claims.getSubject());
-        } catch (JwtException | IllegalArgumentException | NumberFormatException e) {
+        } catch (JwtException | IllegalArgumentException e) {
+            // NumberFormatException 是 IllegalArgumentException 的子类，已包含在内，无需单独列出
             log.warn("JWT 解析失败: {}", e.getMessage());
             return null;
         }
