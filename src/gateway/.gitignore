@@ -34,3 +34,7 @@ build/
 
 ### ENV ###
 application-local.yml
+
+### JVM 崩溃日志（本地运行产物，不提交）###
+hs_err_pid*.log
+replay_pid*.log
