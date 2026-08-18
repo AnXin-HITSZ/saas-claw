@@ -1,0 +1,41 @@
+# backend 动态创建/删除任意 claw-{id} 命名空间及其内资源，需 cluster 级权限。
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: backend
+  namespace: saas-claw
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: saas-claw-backend-provisioner
+rules:
+  # 建/删/查 Claw 命名空间
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "create", "delete"]
+  # Claw 命名空间内的 Secret / PVC / Service
+  - apiGroups: [""]
+    resources: ["secrets", "persistentvolumeclaims", "services"]
+    verbs: ["get", "list", "create", "delete"]
+  # Claw 命名空间内的 Deployment
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "create", "delete"]
+  # 排障可选：查 Pod 状态
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: saas-claw-backend-provisioner
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: saas-claw-backend-provisioner
+subjects:
+  - kind: ServiceAccount
+    name: backend
+    namespace: saas-claw

@@ -11,7 +11,7 @@ import com.saasclaw.backend.service.SkillFileService;
 import com.saasclaw.backend.vo.SkillFileVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.util.DigestUtils;
+import com.saasclaw.backend.util.HashUtil;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -36,7 +36,7 @@ public class SkillFileServiceImpl implements SkillFileService {
         String hash;
         String url;
         try {
-            hash = DigestUtils.sha256Hex(file.getBytes());
+            hash = HashUtil.sha256Hex(file.getBytes());
             // key = skill/{skillId}/{path}，同名覆盖同一对象
             url = ossService.upload("skill/" + skillId + "/" + path,
                     file.getInputStream(), file.getSize(), contentType(file, path));

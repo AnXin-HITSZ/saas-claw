@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: saas-claw
+  labels:
+    app: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      serviceAccountName: backend   # RBAC：动态建 Claw namespace/资源
+      containers:
+        - name: backend
+          image: crpi-li78f6lp5zheaj11.cn-shenzhen.personal.cr.aliyuncs.com/anxin-hitsz-saas-claw/backend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          # ConfigMap(非敏感) + Secret(敏感) 全量注入；Dockerfile 已设 SPRING_PROFILES_ACTIVE=prod，
+          # ConfigMap 再次显式覆盖，双保险避免误加载 local profile。
+          envFrom:
+            - configMapRef:
+                name: saas-claw-config
+            - secretRef:
+                name: saas-claw-secret
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+          # 无 actuator，用 TCP 探针
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: saas-claw
+  labels:
+    app: backend
+spec:
+  type: ClusterIP
+  selector:
+    app: backend
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP

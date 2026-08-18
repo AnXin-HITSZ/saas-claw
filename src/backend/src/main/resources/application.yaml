@@ -1,5 +1,9 @@
 server:
   port: 8080
+  servlet:
+    # 全局前缀 /api：与网关路由(/api/** 不 StripPrefix 转发)、前端 axios baseURL=/api 契约对齐。
+    # controllers 用裸路径(/auth、/claws...)，实际对外为 /api/auth、/api/claws。
+    context-path: /api
 
 spring:
   application:
@@ -13,7 +17,7 @@ spring:
   datasource:
     url: jdbc:mysql://${DB_HOST:localhost}:3306/${DB_NAME:saas_claw}?useSSL=false&serverTimezone=Asia/Shanghai
     username: ${DB_USER:root}
-    password: ${DB_PASS:}
+    password: ${DB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       minimum-idle: 2
@@ -42,3 +46,35 @@ oss:
   access-key-id: ${OSS_ACCESS_KEY_ID:}
   access-key-secret: ${OSS_ACCESS_KEY_SECRET:}
   bucket: ${OSS_BUCKET:}
+
+claw:
+  # 审批回调 runtime Pod 的 URL 模板。{id} 会被替换为 clawId。
+  # 本地默认裸名（仅同 namespace 可达）；生产必须用集群内 FQDN：
+  # http://claw-{id}.claw-{id}.svc.cluster.local:8000
+  callback-url-template: ${CLAW_CALLBACK_URL_TEMPLATE:http://claw-{id}:8000}
+  k8s:
+    # 是否启用 K8s 供给。false（默认）= Claw 创建仅写库、不建 K8s 对象（本地/无集群）。
+    enabled: ${CLAW_K8S_ENABLED:false}
+    runtime-image: ${CLAW_K8S_RUNTIME_IMAGE:}
+    image-pull-policy: ${CLAW_K8S_IMAGE_PULL_POLICY:IfNotPresent}
+    # Claw Pod 回连 backend 的基址（含 /api）。跨命名空间须写全 FQDN。
+    backend-base-url: ${CLAW_K8S_BACKEND_BASE_URL:http://backend.saas-claw.svc.cluster.local:8080/api}
+    backend-api-key: ${CLAW_K8S_BACKEND_API_KEY:}
+    redis-url: ${CLAW_K8S_REDIS_URL:}
+    mysql-host: ${CLAW_K8S_MYSQL_HOST:}
+    mysql-port: ${CLAW_K8S_MYSQL_PORT:3306}
+    mysql-user: ${CLAW_K8S_MYSQL_USER:}
+    mysql-password: ${CLAW_K8S_MYSQL_PASSWORD:}
+    mysql-database: ${CLAW_K8S_MYSQL_DATABASE:saas_claw}
+    oss-endpoint: ${CLAW_K8S_OSS_ENDPOINT:}
+    oss-access-key-id: ${CLAW_K8S_OSS_ACCESS_KEY_ID:}
+    oss-access-key-secret: ${CLAW_K8S_OSS_ACCESS_KEY_SECRET:}
+    oss-bucket: ${CLAW_K8S_OSS_BUCKET:}
+    router-model: ${CLAW_K8S_ROUTER_MODEL:router}
+    workspace-root: ${CLAW_K8S_WORKSPACE_ROOT:/workspace}
+    pvc-size: ${CLAW_K8S_PVC_SIZE:1Gi}
+    storage-class: ${CLAW_K8S_STORAGE_CLASS:local-path}
+    cpu-request: ${CLAW_K8S_CPU_REQUEST:100m}
+    cpu-limit: ${CLAW_K8S_CPU_LIMIT:1}
+    memory-request: ${CLAW_K8S_MEMORY_REQUEST:256Mi}
+    memory-limit: ${CLAW_K8S_MEMORY_LIMIT:1Gi}

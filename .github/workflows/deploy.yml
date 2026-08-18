@@ -1,0 +1,88 @@
+name: build-and-deploy
+
+# push main → 并行 build 4 镜像 → push ACR → SSH 到 ECS 对 K3s 滚动更新。
+# 首次部署前需手动 apply 一次 00~12 manifest（见 src/deploy/k8s/README.md），
+# 之后每次 push 由本工作流自动发版，无需手动。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch: {}   # 允许手动触发（Actions 页面点 Run）
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true   # 连续 push 时取消进行中的旧构建
+
+env:
+  REGISTRY: crpi-li78f6lp5zheaj11.cn-shenzhen.personal.cr.aliyuncs.com
+  ACR_NAMESPACE: anxin-hitsz-saas-claw
+
+jobs:
+  # ---- 阶段1：并行构建并推送 4 个镜像到 ACR ----
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false   # 单个镜像失败不影响其它继续
+      matrix:
+        service: [backend, gateway, runtime, frontend]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: 登录 ACR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: 构建并推送 ${{ matrix.service }}
+        uses: docker/build-push-action@v6
+        with:
+          context: src/${{ matrix.service }}
+          file: src/${{ matrix.service }}/Dockerfile
+          platforms: linux/amd64   # ECS 为 amd64，无需跨架构
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.ACR_NAMESPACE }}/${{ matrix.service }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.ACR_NAMESPACE }}/${{ matrix.service }}:latest
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+  # ---- 阶段2：SSH 到 ECS，对 K3s 集群滚动更新（用不可变 SHA tag）----
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH 到 ECS 执行 K3s rollout
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.ECS_HOST }}
+          username: ${{ secrets.ECS_SSH_USER }}
+          key: ${{ secrets.ECS_SSH_KEY }}
+          port: ${{ secrets.ECS_SSH_PORT || '22' }}
+          script: |
+            set -euo pipefail
+            REG=${{ env.REGISTRY }}/${{ env.ACR_NAMESPACE }}
+            SHA=${{ github.sha }}
+
+            # 1) 先把 runtime 镜像地址写进 ConfigMap（新建 Claw Pod 会用它）。
+            #    必须先于 backend 的 set image——backend 新 pod 创建时才解析 ConfigMap 最新值。
+            k3s kubectl -n saas-claw set env configmap/saas-claw-config \
+              CLAW_K8S_RUNTIME_IMAGE="$REG/runtime:$SHA"
+
+            # 2) 三个常驻服务指向新 SHA 触发滚动更新（deployment名 容器名=镜像）
+            k3s kubectl -n saas-claw set image deployment/backend  backend="$REG/backend:$SHA"
+            k3s kubectl -n saas-claw set image deployment/gateway  gateway="$REG/gateway:$SHA"
+            k3s kubectl -n saas-claw set image deployment/frontend frontend="$REG/frontend:$SHA"
+
+            # 3) 等待滚动完成；任一超时则本步骤失败（可在 Actions 看到红）
+            k3s kubectl -n saas-claw rollout status deployment/backend  --timeout=180s
+            k3s kubectl -n saas-claw rollout status deployment/gateway  --timeout=180s
+            k3s kubectl -n saas-claw rollout status deployment/frontend --timeout=120s
+
+            echo "已部署到 SHA=$SHA"

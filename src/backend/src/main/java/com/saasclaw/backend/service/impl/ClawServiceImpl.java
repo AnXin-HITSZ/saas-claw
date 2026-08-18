@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.saasclaw.backend.common.BizException;
 import com.saasclaw.backend.dto.ClawCreateRequest;
 import com.saasclaw.backend.entity.Claw;
+import com.saasclaw.backend.k8s.ClawProvisioner;
 import com.saasclaw.backend.mapper.ClawMapper;
 import com.saasclaw.backend.service.ClawService;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +20,7 @@ import java.util.UUID;
 public class ClawServiceImpl implements ClawService {
 
     private final ClawMapper clawMapper;
+    private final ClawProvisioner clawProvisioner;
 
     @Override
     public List<Claw> list(Long userId) {
@@ -55,20 +57,27 @@ public class ClawServiceImpl implements ClawService {
         claw.setNamespace("claw-" + claw.getId());
         clawMapper.updateById(claw);
 
-        // TODO: K8s 部署协调（建 namespace / PVC / Deployment）待 K3s 环境就绪后实现
+        // K8s 供给：建 namespace / Secret / PVC / Deployment / Service。
+        // 失败时 provisioner 自行清理已建资源并抛出，触发本方法 @Transactional 回滚，
+        // 避免残留孤儿命名空间与脏库行。enabled=false 时为 Noop（纯写库），本地/无集群行为不变。
+        clawProvisioner.provision(claw);
 
         return clawMapper.selectById(claw.getId());
     }
 
     @Override
+    @Transactional
     public void delete(Long userId, Long id) {
-        getOwned(userId, id);
+        Claw claw = getOwned(userId, id);
 
         clawMapper.update(null,
                 new LambdaUpdateWrapper<Claw>()
                         .eq(Claw::getId, id)
                         .set(Claw::getStatus, 0)
         );
+
+        // 拆除 K8s 资源（删除命名空间即级联）。幂等：不存在视为成功。
+        clawProvisioner.teardown(claw.getNamespace());
     }
 
     /**

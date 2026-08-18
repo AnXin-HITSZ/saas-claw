@@ -1,0 +1,35 @@
+# 非敏感共享配置。敏感值在 saas-claw-secret。
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: saas-claw-config
+  namespace: saas-claw
+data:
+  # ---- host 上的 MySQL / Redis（走 ECS 私网 IP，集群内 Pod 可达，不绕公网）----
+  DB_HOST: "172.22.12.159"
+  DB_NAME: "saas_claw"
+  DB_USER: "saas_app"
+  REDIS_HOST: "172.22.12.159"
+  REDIS_PORT: "6379"
+  # ---- backend 自身 OSS（非敏感部分）----
+  OSS_ENDPOINT: "oss-cn-shenzhen.aliyuncs.com"
+  OSS_BUCKET: "anxin-hitsz-saas-claw"
+  # ---- 生产 profile：覆盖 backend 默认的 local（避免加载本地敏感配置文件）----
+  SPRING_PROFILES_ACTIVE: "prod"
+  # ---- Claw K8s 供给（backend 建 Claw 时下发 runtime Pod）----
+  CLAW_K8S_ENABLED: "true"
+  # runtime 镜像：ACR 地址，tag 由 CI 覆盖（此处占位 latest）
+  CLAW_K8S_RUNTIME_IMAGE: "crpi-li78f6lp5zheaj11.cn-shenzhen.personal.cr.aliyuncs.com/anxin-hitsz-saas-claw/runtime:latest"
+  CLAW_K8S_IMAGE_PULL_POLICY: "IfNotPresent"
+  CLAW_K8S_BACKEND_BASE_URL: "http://backend.saas-claw.svc.cluster.local:8080/api"
+  CLAW_K8S_MYSQL_HOST: "172.22.12.159"
+  CLAW_K8S_MYSQL_PORT: "3306"
+  CLAW_K8S_MYSQL_USER: "saas_app"
+  CLAW_K8S_MYSQL_DATABASE: "saas_claw"
+  CLAW_K8S_OSS_ENDPOINT: "oss-cn-shenzhen.aliyuncs.com"
+  CLAW_K8S_OSS_BUCKET: "anxin-hitsz-saas-claw"
+  CLAW_K8S_ROUTER_MODEL: "router"
+  CLAW_K8S_STORAGE_CLASS: "local-path"
+  CLAW_K8S_PVC_SIZE: "1Gi"
+  # ---- 审批回调：集群内 FQDN（裸名只在 backend 自身 namespace 可达，必须写全）----
+  CLAW_CALLBACK_URL_TEMPLATE: "http://claw-{id}.claw-{id}.svc.cluster.local:8000"

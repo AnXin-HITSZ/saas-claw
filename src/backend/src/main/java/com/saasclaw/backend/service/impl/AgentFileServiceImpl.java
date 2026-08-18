@@ -11,7 +11,7 @@ import com.saasclaw.backend.service.OssService;
 import com.saasclaw.backend.vo.AgentFileVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.util.DigestUtils;
+import com.saasclaw.backend.util.HashUtil;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -36,7 +36,7 @@ public class AgentFileServiceImpl implements AgentFileService {
         String hash;
         String url;
         try {
-            hash = DigestUtils.sha256Hex(file.getBytes());
+            hash = HashUtil.sha256Hex(file.getBytes());
             url = ossService.upload("agent/" + agentId + "/" + path,
                     file.getInputStream(), file.getSize(), contentType(file, path));
         } catch (IOException e) {
