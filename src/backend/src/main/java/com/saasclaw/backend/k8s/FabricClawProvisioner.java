@@ -58,14 +58,14 @@ public class FabricClawProvisioner implements ClawProvisioner {
     }
 
     @Override
-    public void provision(Claw claw) {
+    public void provision(Claw claw, String backendApiKeyPlain) {
         String ns = claw.getNamespace();
         if (props.getRuntimeImage() == null || props.getRuntimeImage().isBlank()) {
             throw new IllegalStateException("claw.k8s.runtime-image 未配置，无法下发 Claw Pod");
         }
         try {
             createNamespace(ns, claw);
-            createSecret(ns);
+            createSecret(ns, backendApiKeyPlain);
             createPvc(ns);
             createDeployment(ns, claw);
             createService(ns);
@@ -104,14 +104,18 @@ public class FabricClawProvisioner implements ClawProvisioner {
         client.namespaces().resource(namespace).create();
     }
 
-    /** 敏感配置进 Secret（stringData 明文写入，K8s 侧存储为 base64）。 */
-    private void createSecret(String ns) {
+    /**
+     * 敏感配置进 Secret（stringData 明文写入，K8s 侧存储为 base64）。
+     * BACKEND_API_KEY 是「本 Claw 专属」的程序通道 key（ClawService 创建时生成并写 authorization 表），
+     * 归属 claw.userId —— 程序通道/审批的身份由它解析，不可复用其它 Claw 或平台 key。
+     */
+    private void createSecret(String ns, String backendApiKeyPlain) {
         Map<String, String> data = new LinkedHashMap<>();
         data.put("REDIS_URL", props.getRedisUrl());
         data.put("MYSQL_PASSWORD", props.getMysqlPassword());
         data.put("OSS_ACCESS_KEY_ID", props.getOssAccessKeyId());
         data.put("OSS_ACCESS_KEY_SECRET", props.getOssAccessKeySecret());
-        data.put("BACKEND_API_KEY", props.getBackendApiKey());
+        data.put("BACKEND_API_KEY", backendApiKeyPlain);
 
         Map<String, String> b64 = new LinkedHashMap<>();
         data.forEach((k, v) -> b64.put(k,

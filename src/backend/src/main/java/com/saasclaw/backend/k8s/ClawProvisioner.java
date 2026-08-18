@@ -15,9 +15,12 @@ public interface ClawProvisioner {
      * 为 Claw 下发全套 K8s 资源。命名空间与 Service 均命名为 {@code claw-{id}}，
      * 以匹配网关路由与审批回调对 {@code claw-{id}.claw-{id}.svc.cluster.local:8000} 的硬约定。
      *
+     * @param claw               目标 Claw（含 id / namespace / userId）
+     * @param backendApiKeyPlain 该 Claw 专属的程序通道 API Key 明文，写入其命名空间内 Secret 供 Pod 使用
+     *
      * <p>失败时实现方须自行清理已建的部分资源并抛异常，交由上层事务回滚 DB 行，避免残留命名空间。
      */
-    void provision(Claw claw);
+    void provision(Claw claw, String backendApiKeyPlain);
 
     /** 拆除 Claw 的全部 K8s 资源（删除命名空间即级联）。幂等：不存在视为成功。 */
     void teardown(String namespace);

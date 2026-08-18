@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 public class NoopClawProvisioner implements ClawProvisioner {
 
     @Override
-    public void provision(Claw claw) {
+    public void provision(Claw claw, String backendApiKeyPlain) {
         log.info("claw.k8s.enabled=false，跳过 K8s 供给：claw id={} namespace={}", claw.getId(), claw.getNamespace());
     }
 

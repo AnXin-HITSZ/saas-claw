@@ -11,7 +11,11 @@ import org.springframework.stereotype.Component;
  * Secret 注入 Pod（跨命名空间无法直接引用 backend 自身 Secret，故由 backend 复制下发）。
  *
  * <p>enabled=false（默认）时不装配 KubernetesClient，Claw 创建退化为纯写库（本地开发行为不变）。
- * 环境变量映射示例：CLAW_K8S_ENABLED、CLAW_K8S_RUNTIME_IMAGE、CLAW_K8S_BACKEND_API_KEY 等。
+ * 环境变量映射示例：CLAW_K8S_ENABLED、CLAW_K8S_RUNTIME_IMAGE、CLAW_K8S_BACKEND_BASE_URL 等。
+ *
+ * <p>说明：Claw Pod 调 backend 程序通道使用的并非平台级共享 key，而是每个 Claw 创建时由
+ * ClawService 生成的专属 sk-xxx（明文仅写入该 Claw 命名空间内的 Secret BACKEND_API_KEY，
+ * authorization 表只存 SHA-256 哈希且归属 claw.userId），用于审批等请求的身份归属。
  */
 @Data
 @Component
@@ -29,9 +33,6 @@ public class K8sProperties {
 
     /** Claw Pod 回连 backend 的基址（含 /api）。集群内 FQDN，跨命名空间必须写全。 */
     private String backendBaseUrl = "http://backend.saas-claw.svc.cluster.local:8080/api";
-
-    /** Claw Pod 调 backend 程序通道用的平台级 API Key（authorization 表里的 sk-xxx）。敏感。 */
-    private String backendApiKey = "";
 
     /** Redis 连接串 redis://[:pwd@]host:port/db。敏感。 */
     private String redisUrl = "";

@@ -84,10 +84,11 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public List<ApiKeyVO> listApiKeys(Long userId) {
-        // 返回全部（含已吊销，status 区分），按创建时间倒序
+        // 仅列出用户创建的业务 key；系统签发的 Claw 程序通道 key（claw-channel-{id}）不展示
         return authorizationMapper.selectList(
                         new LambdaQueryWrapper<Authorization>()
                                 .eq(Authorization::getUserId, userId)
+                                .notLikeRight(Authorization::getName, ClawServiceImpl.CLAW_CHANNEL_KEY_NAME_PREFIX)
                                 .orderByDesc(Authorization::getId))
                 .stream()
                 .map(a -> new ApiKeyVO(
@@ -103,7 +104,9 @@ public class AuthServiceImpl implements AuthService {
                 new LambdaQueryWrapper<Authorization>()
                         .eq(Authorization::getId, id)
                         .eq(Authorization::getUserId, userId));
-        if (auth == null || auth.getStatus() == 0) {
+        // 系统签发的 Claw 程序通道 key 不允许用户手动吊销（随 Claw 删除自动吊销）
+        if (auth == null || auth.getStatus() == 0
+                || auth.getName() != null && auth.getName().startsWith(ClawServiceImpl.CLAW_CHANNEL_KEY_NAME_PREFIX)) {
             throw new BizException(404, "API Key 不存在");
         }
         authorizationMapper.update(null,

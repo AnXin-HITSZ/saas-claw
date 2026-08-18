@@ -59,7 +59,6 @@ claw:
     image-pull-policy: ${CLAW_K8S_IMAGE_PULL_POLICY:IfNotPresent}
     # Claw Pod 回连 backend 的基址（含 /api）。跨命名空间须写全 FQDN。
     backend-base-url: ${CLAW_K8S_BACKEND_BASE_URL:http://backend.saas-claw.svc.cluster.local:8080/api}
-    backend-api-key: ${CLAW_K8S_BACKEND_API_KEY:}
     redis-url: ${CLAW_K8S_REDIS_URL:}
     mysql-host: ${CLAW_K8S_MYSQL_HOST:}
     mysql-port: ${CLAW_K8S_MYSQL_PORT:3306}
