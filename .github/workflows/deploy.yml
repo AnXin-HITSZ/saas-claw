@@ -45,7 +45,11 @@ jobs:
         with:
           context: src/${{ matrix.service }}
           file: src/${{ matrix.service }}/Dockerfile
-          platforms: linux/amd64   # ECS 为 amd64，无需跨架构
+          # ECS 为 amd64，无需跨架构；provenance/sbom 关闭：
+          # ACR 个人版不支持 OCI attestation 制品，默认开启会导致 push 被拒
+          platforms: linux/amd64
+          provenance: false
+          sbom: false
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.ACR_NAMESPACE }}/${{ matrix.service }}:${{ github.sha }}
