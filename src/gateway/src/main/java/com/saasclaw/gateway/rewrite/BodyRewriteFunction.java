@@ -19,6 +19,11 @@ public class BodyRewriteFunction implements RewriteFunction<byte[], byte[]> {
 
     @Override
     public Publisher<byte[]> apply(ServerWebExchange exchange, byte[] bytes) {
+        // 空请求体（GET 会话/消息/trace 等）防御：ModifyRequestBody 对无 body 请求以 null 传入，
+        // 直接 new String(null) 会 NPE 导致网关 500。这里透传空数组，让重写链自然走空 body 分支。
+        if (bytes == null || bytes.length == 0) {
+            return Mono.just(new byte[0]);
+        }
         String body = new String(bytes, StandardCharsets.UTF_8);
 
         String modelName = extractModel(body);
