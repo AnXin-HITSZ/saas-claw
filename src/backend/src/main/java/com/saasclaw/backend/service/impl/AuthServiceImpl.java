@@ -48,7 +48,7 @@ public class AuthServiceImpl implements AuthService {
         userMapper.insert(user);
 
         String token = jwtUtil.generateToken(user.getId(), user.getUsername(), 0);
-        return new LoginVO(token, user.getId(), user.getUsername(), user.getNickname());
+        return new LoginVO(token, user.getId(), user.getUsername(), user.getNickname(), 0);
     }
 
     @Override
@@ -62,7 +62,7 @@ public class AuthServiceImpl implements AuthService {
             throw new BizException(403, "账号已被禁用");
         }
         String token = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getRole());
-        return new LoginVO(token, user.getId(), user.getUsername(), user.getNickname());
+        return new LoginVO(token, user.getId(), user.getUsername(), user.getNickname(), user.getRole());
     }
 
     @Override
