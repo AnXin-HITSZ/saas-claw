@@ -14,9 +14,20 @@ const routes: RouteRecordRaw[] = [
     meta: { public: true },
   },
   {
+    path: '/welcome',
+    name: 'welcome',
+    component: () => import('@/views/WelcomeView.vue'),
+    meta: { public: true },
+    beforeEnter: () => {
+      const auth = useAuthStore()
+      if (auth.isLoggedIn) return { name: 'claws' }
+      return true
+    },
+  },
+  {
     path: '/',
     component: () => import('@/layouts/DefaultLayout.vue'),
-    redirect: '/claws',
+    redirect: '/welcome',
     children: [
       { path: 'claws', name: 'claws', component: () => import('@/views/ClawListView.vue') },
       { path: 'agents', name: 'agents', component: () => import('@/views/AgentListView.vue') },

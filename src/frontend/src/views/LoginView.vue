@@ -3,6 +3,7 @@ import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ApiError } from '@/api'
+import AppButton from '@/components/ui/AppButton.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -38,15 +39,22 @@ async function submit() {
 
 <template>
   <div class="login-page">
-    <div class="login-box card">
-      <div class="login-brand">SaaS Claw</div>
-      <div class="login-sub">{{ mode === 'login' ? '登录控制台' : '注册新账号' }}</div>
+    <div class="login-card">
+      <div class="card-glow" />
+
+      <div class="login-brand">
+        <span class="brand-logo">◢</span>
+        <div class="brand-text">
+          <div class="brand-name">SaasClaw</div>
+          <div class="brand-sub">{{ mode === 'login' ? '登录控制台' : '注册新账号' }}</div>
+        </div>
+      </div>
 
       <div v-if="error" class="alert alert-error">{{ error }}</div>
 
       <div class="form-item">
         <label>用户名</label>
-        <input v-model="form.username" class="input" placeholder="用户名" @keyup.enter="submit" />
+        <input v-model="form.username" class="input" placeholder="用户名" autocomplete="username" @keyup.enter="submit" />
       </div>
       <div class="form-item">
         <label>密码</label>
@@ -55,19 +63,22 @@ async function submit() {
           type="password"
           class="input"
           placeholder="密码"
+          autocomplete="current-password"
           @keyup.enter="submit"
         />
       </div>
 
-      <button class="btn btn-primary login-submit" :disabled="loading" @click="submit">
-        {{ loading ? '处理中…' : mode === 'login' ? '登录' : '注册' }}
-      </button>
+      <AppButton class="login-submit" :loading="loading" @click="submit">
+        {{ loading ? '' : mode === 'login' ? '登录' : '注册' }}
+      </AppButton>
 
       <div class="login-switch">
-        <span v-if="mode === 'login'">
+        <template v-if="mode === 'login'">
           还没有账号？<a @click="mode = 'register'">去注册</a>
-        </span>
-        <span v-else> 已有账号？<a @click="mode = 'login'">去登录</a> </span>
+        </template>
+        <template v-else>
+          已有账号？<a @click="mode = 'login'">去登录</a>
+        </template>
       </div>
     </div>
   </div>
@@ -75,39 +86,99 @@ async function submit() {
 
 <style scoped>
 .login-page {
-  height: 100%;
+  height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #eaf1ff 0%, #f5f6f8 100%);
+  position: relative;
 }
-.login-box {
-  width: 360px;
-  padding: 32px;
+
+/* 增强背景氛围 */
+.login-page::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(600px 320px at 50% 18%, rgba(245, 168, 61, 0.12), transparent 60%),
+    radial-gradient(520px 300px at 20% 85%, rgba(139, 124, 246, 0.1), transparent 60%),
+    radial-gradient(460px 280px at 85% 70%, rgba(77, 208, 225, 0.07), transparent 60%);
+  pointer-events: none;
 }
+
+.login-card {
+  position: relative;
+  width: 400px;
+  padding: 40px 38px 34px;
+  border-radius: var(--radius-lg);
+  background: rgba(16, 21, 31, 0.82);
+  backdrop-filter: blur(18px);
+  border: 1px solid var(--border);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5), 0 0 40px rgba(139, 124, 246, 0.08);
+}
+
+/* 顶部极光细线 */
+.card-glow {
+  position: absolute;
+  top: 0;
+  left: 24px;
+  right: 24px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), var(--accent-3), transparent);
+  opacity: 0.7;
+}
+
 .login-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 28px;
+}
+.brand-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 13px;
+  background: var(--gradient-aurora);
+  box-shadow: var(--glow-accent);
+  color: #0a0e14;
   font-size: 24px;
   font-weight: 700;
-  text-align: center;
+  flex-shrink: 0;
 }
-.login-sub {
-  text-align: center;
-  color: var(--color-text-weak);
-  margin: 6px 0 24px;
+.brand-text {
+  min-width: 0;
 }
+.brand-name {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+.brand-sub {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
 .login-submit {
   width: 100%;
-  height: 38px;
-  margin-top: 4px;
+  margin-top: 6px;
 }
 .login-switch {
   text-align: center;
-  margin-top: 16px;
+  margin-top: 18px;
   font-size: 13px;
-  color: var(--color-text-weak);
+  color: var(--text-muted);
 }
 .login-switch a {
-  color: var(--color-primary);
+  color: var(--accent);
   cursor: pointer;
+  font-weight: 600;
+}
+.login-switch a:hover {
+  text-decoration: underline;
 }
 </style>

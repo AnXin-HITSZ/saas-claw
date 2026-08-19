@@ -1,15 +1,22 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { toolApi, ApiError } from '@/api'
 import type { Tool } from '@/types/api'
-import BaseModal from '@/components/BaseModal.vue'
 import { useToast } from '@/composables/useToast'
+import PageHeader from '@/components/ui/PageHeader.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppModal from '@/components/ui/AppModal.vue'
+import AppEmpty from '@/components/ui/AppEmpty.vue'
+import AppSkeleton from '@/components/ui/AppSkeleton.vue'
+import AppTag from '@/components/ui/AppTag.vue'
 
 const toast = useToast()
 const list = ref<Tool[]>([])
 const loading = ref(false)
 const detail = ref<Tool | null>(null)
 const showDetail = ref(false)
+
+const sensitiveCount = computed(() => list.value.filter((t) => t.is_sensitive).length)
 
 async function load() {
   loading.value = true
@@ -41,57 +48,143 @@ onMounted(load)
 
 <template>
   <div class="page">
-    <div class="page-header">
-      <div>
-        <div class="page-title">工具</div>
-        <div class="page-sub">平台当前可被 Agent 调用的工具（由运行时同步，只读展示）。</div>
+    <PageHeader title="工具" subtitle="平台当前可被 Agent 调用的工具（由运行时同步，只读展示）。" />
+
+    <!-- 统计行 -->
+    <div v-if="!loading && list.length" class="stat-row">
+      <div class="stat-card">
+        <div class="stat-value accent">{{ list.length }}</div>
+        <div class="stat-label">工具总数</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value warning">{{ sensitiveCount }}</div>
+        <div class="stat-label">敏感工具</div>
       </div>
     </div>
 
-    <div class="card">
-      <div v-if="loading" class="empty">加载中…</div>
-      <div v-else-if="!list.length" class="empty">暂无工具。</div>
-      <table v-else class="table">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>名称</th>
-            <th>描述</th>
-            <th>敏感</th>
-            <th style="width: 90px">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="t in list" :key="t.id">
-            <td>{{ t.id }}</td>
-            <td class="mono">{{ t.name }}</td>
-            <td class="text-weak">{{ t.description || '—' }}</td>
-            <td>
-              <span v-if="t.is_sensitive" class="tag tag-warning">敏感</span>
-              <span v-else class="tag">普通</span>
-            </td>
-            <td><button class="btn btn-sm" @click="open(t)">Schema</button></td>
-          </tr>
-        </tbody>
-      </table>
+    <!-- 骨架 -->
+    <div v-if="loading" class="grid">
+      <AppSkeleton v-for="i in 4" :key="i" variant="rect" height="120px" />
     </div>
 
-    <BaseModal v-model="showDetail" :title="detail?.name || '工具'">
-      <div class="text-weak" style="margin-bottom: 8px">{{ detail?.description || '无描述' }}</div>
+    <!-- 空态 -->
+    <AppEmpty
+      v-else-if="!list.length"
+      icon="▤"
+      title="暂无工具"
+      description="工具由运行时从插件/注册中心同步，只读展示。"
+    />
+
+    <!-- 工具卡片 -->
+    <div v-else class="tool-grid">
+      <TransitionGroup name="stagger" tag="div" class="tool-grid">
+        <div
+          v-for="(t, i) in list"
+          :key="t.id"
+          class="tool-card card"
+          :style="{ transitionDelay: `${i * 40}ms` }"
+        >
+          <div class="card-top">
+            <span class="card-icon">▤</span>
+            <div class="card-title">
+              <h3 class="mono">{{ t.name }}</h3>
+              <span class="meta-line">#{{ t.id }}</span>
+            </div>
+            <AppTag :tone="t.is_sensitive ? 'warning' : 'neutral'" :pulse="!!t.is_sensitive">
+              {{ t.is_sensitive ? '敏感' : '普通' }}
+            </AppTag>
+          </div>
+
+          <p class="desc">{{ t.description || '暂无描述' }}</p>
+
+          <div class="card-actions">
+            <AppButton variant="ghost" size="sm" @click="open(t)">查看 Schema</AppButton>
+          </div>
+        </div>
+      </TransitionGroup>
+    </div>
+
+    <!-- Schema 弹窗 -->
+    <AppModal :show="showDetail" :title="detail?.name || '工具'" width="640px" @close="showDetail = false">
+      <div class="text-weak" style="margin-bottom: 10px">{{ detail?.description || '无描述' }}</div>
       <pre class="schema">{{ prettySchema(detail?.schema_json ?? null) }}</pre>
-    </BaseModal>
+      <template #actions>
+        <AppButton variant="ghost" @click="showDetail = false">关闭</AppButton>
+      </template>
+    </AppModal>
   </div>
 </template>
 
 <style scoped>
-.schema {
-  background: #f5f6f8;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  padding: 12px;
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+.card-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--accent-glow);
+  color: var(--accent);
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.card-title {
+  flex: 1;
+  min-width: 0;
+}
+.card-title h3 {
+  margin: 0 0 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.meta-line {
   font-size: 12px;
+  color: var(--text-muted);
+}
+.desc {
+  margin: 12px 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.card-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+
+.schema {
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  font-size: 12px;
+  color: var(--text-secondary);
   overflow: auto;
-  max-height: 360px;
-  font-family: 'SFMono-Regular', Consolas, monospace;
+  max-height: 420px;
+  font-family: var(--font-mono);
+}
+
+.stagger-enter-active {
+  transition: opacity 0.4s var(--ease-out), transform 0.4s var(--ease-out);
+}
+.stagger-enter-from {
+  opacity: 0;
+  transform: translateY(16px);
 }
 </style>

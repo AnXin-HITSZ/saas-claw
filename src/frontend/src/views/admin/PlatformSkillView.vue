@@ -6,8 +6,13 @@
 import { onMounted, reactive, ref } from 'vue'
 import { skillApi, ApiError } from '@/api'
 import type { Skill } from '@/types/api'
-import BaseModal from '@/components/BaseModal.vue'
 import { useToast } from '@/composables/useToast'
+import PageHeader from '@/components/ui/PageHeader.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppModal from '@/components/ui/AppModal.vue'
+import AppConfirm from '@/components/ui/AppConfirm.vue'
+import AppEmpty from '@/components/ui/AppEmpty.vue'
+import AppSkeleton from '@/components/ui/AppSkeleton.vue'
 
 const toast = useToast()
 const list = ref<Skill[]>([])
@@ -17,6 +22,9 @@ const showEdit = ref(false)
 const editing = ref<Skill | null>(null)
 const form = reactive({ name: '', description: '', version: '', author: '' })
 const submitting = ref(false)
+
+const removing = ref<Skill | null>(null)
+const removingLoading = ref(false)
 
 async function load() {
   loading.value = true
@@ -72,14 +80,18 @@ async function save() {
   }
 }
 
-async function remove(s: Skill) {
-  if (!confirm(`删除平台技能「${s.name}」？`)) return
+async function confirmRemove() {
+  if (!removing.value) return
+  removingLoading.value = true
   try {
-    await skillApi.removePlatform(s.id)
+    await skillApi.removePlatform(removing.value.id)
     toast.success('已删除')
+    removing.value = null
     await load()
   } catch (e) {
     toast.error(e instanceof ApiError ? e.message : '删除失败')
+  } finally {
+    removingLoading.value = false
   }
 }
 
@@ -88,52 +100,67 @@ onMounted(load)
 
 <template>
   <div class="page">
-    <div class="page-header">
-      <div>
-        <div class="page-title">平台技能 <span class="tag tag-warning">管理员</span></div>
-        <div class="page-sub">平台级公共技能（user_id=0），对所有用户可见。</div>
-      </div>
-      <button class="btn btn-primary" @click="openCreate">新建平台技能</button>
+    <PageHeader title="平台技能" subtitle="平台级公共技能（user_id=0），对所有用户可见。">
+      <template #actions>
+        <AppButton @click="openCreate">新建平台技能</AppButton>
+      </template>
+    </PageHeader>
+
+    <!-- 骨架 -->
+    <div v-if="loading" class="skill-grid">
+      <AppSkeleton v-for="i in 3" :key="i" variant="rect" height="140px" />
     </div>
 
-    <div class="card">
-      <div v-if="loading" class="empty">加载中…</div>
-      <div v-else-if="!list.length" class="empty">暂无技能。</div>
-      <table v-else class="table">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>名称</th>
-            <th>描述</th>
-            <th>版本</th>
-            <th style="width: 130px">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="s in list" :key="s.id">
-            <td>{{ s.id }}</td>
-            <td>{{ s.name }}</td>
-            <td class="text-weak">{{ s.description }}</td>
-            <td class="text-weak">{{ s.version || '—' }}</td>
-            <td>
-              <div class="row" style="gap: 6px">
-                <button class="btn btn-sm" @click="openEdit(s)">编辑</button>
-                <button class="btn btn-sm btn-danger" @click="remove(s)">删除</button>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+    <!-- 空态 -->
+    <AppEmpty
+      v-else-if="!list.length"
+      icon="▥"
+      title="暂无平台技能"
+      description="创建平台级公共技能，所有用户即可在技能列表中看到。"
+    >
+      <AppButton @click="openCreate">新建平台技能</AppButton>
+    </AppEmpty>
+
+    <!-- 卡片网格 -->
+    <div v-else class="skill-grid">
+      <TransitionGroup name="stagger" tag="div" class="skill-grid">
+        <div
+          v-for="(s, i) in list"
+          :key="s.id"
+          class="skill-card card"
+          :style="{ transitionDelay: `${i * 40}ms` }"
+        >
+          <div class="card-top">
+            <span class="card-icon">▥</span>
+            <div class="card-title">
+              <h3>{{ s.name }}</h3>
+              <span class="meta-line">
+                <span class="mono">#{{ s.id }}</span>
+                <template v-if="s.version"> · v{{ s.version }}</template>
+                <template v-if="s.author"> · {{ s.author }}</template>
+              </span>
+            </div>
+          </div>
+
+          <p class="desc">{{ s.description }}</p>
+
+          <div class="card-actions">
+            <AppButton variant="ghost" size="sm" @click="openEdit(s)">编辑</AppButton>
+            <AppButton variant="danger" size="sm" @click="removing = s">删除</AppButton>
+          </div>
+        </div>
+      </TransitionGroup>
     </div>
 
-    <BaseModal v-model="showEdit" :title="editing ? '编辑平台技能' : '新建平台技能'">
+    <!-- 创建/编辑弹窗 -->
+    <AppModal :show="showEdit" :title="editing ? '编辑平台技能' : '新建平台技能'" width="520px" @close="showEdit = false">
       <div class="form-item">
         <label>名称</label>
-        <input v-model="form.name" class="input" />
+        <input v-model="form.name" class="input" placeholder="技能名称" />
       </div>
       <div class="form-item">
         <label>描述</label>
-        <textarea v-model="form.description" class="textarea" />
+        <textarea v-model="form.description" class="textarea" placeholder="技能用途说明" />
       </div>
       <div class="row">
         <div class="form-item" style="flex: 1">
@@ -145,12 +172,85 @@ onMounted(load)
           <input v-model="form.author" class="input" placeholder="可选" />
         </div>
       </div>
-      <template #footer>
-        <button class="btn" @click="showEdit = false">取消</button>
-        <button class="btn btn-primary" :disabled="submitting" @click="save">
-          {{ submitting ? '保存中…' : '保存' }}
-        </button>
+      <template #actions>
+        <AppButton variant="ghost" @click="showEdit = false">取消</AppButton>
+        <AppButton :loading="submitting" @click="save">{{ submitting ? '' : '保存' }}</AppButton>
       </template>
-    </BaseModal>
+    </AppModal>
+
+    <!-- 删除确认 -->
+    <AppConfirm
+      :show="!!removing"
+      title="删除平台技能"
+      :message="`确认删除平台技能「${removing?.name}」？`"
+      confirm-text="删除"
+      danger
+      :loading="removingLoading"
+      @confirm="confirmRemove"
+      @cancel="removing = null"
+    />
   </div>
 </template>
+
+<style scoped>
+.skill-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+.card-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--gradient-aurora);
+  color: #0a0e14;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.card-title {
+  flex: 1;
+  min-width: 0;
+}
+.card-title h3 {
+  margin: 0 0 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.meta-line {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.desc {
+  margin: 12px 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+
+.stagger-enter-active {
+  transition: opacity 0.4s var(--ease-out), transform 0.4s var(--ease-out);
+}
+.stagger-enter-from {
+  opacity: 0;
+  transform: translateY(16px);
+}
+</style>

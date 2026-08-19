@@ -3,8 +3,13 @@ import { onMounted, ref } from 'vue'
 import { approvalApi, ApiError } from '@/api'
 import { APPROVAL_ACTION } from '@/types/api'
 import type { ApprovalRequestVO } from '@/types/api'
-import BaseModal from '@/components/BaseModal.vue'
 import { useToast } from '@/composables/useToast'
+import PageHeader from '@/components/ui/PageHeader.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppModal from '@/components/ui/AppModal.vue'
+import AppEmpty from '@/components/ui/AppEmpty.vue'
+import AppSkeleton from '@/components/ui/AppSkeleton.vue'
+import AppTag from '@/components/ui/AppTag.vue'
 
 const toast = useToast()
 const tab = ref<'pending' | 'history'>('pending')
@@ -59,7 +64,9 @@ function submitCustom() {
 
 function statusText(status: number) {
   // 约定：0=待处理 1=已处理（具体以后端为准，这里做展示兜底）
-  return status === 0 ? { cls: 'tag-warning', text: '待处理' } : { cls: 'tag-success', text: '已处理' }
+  return status === 0
+    ? { tone: 'warning' as const, text: '待处理' }
+    : { tone: 'success' as const, text: '已处理' }
 }
 function actionText(action: number | null) {
   if (action === APPROVAL_ACTION.ALLOW) return '允许'
@@ -68,108 +75,158 @@ function actionText(action: number | null) {
   return '—'
 }
 
+function fmtTime(s: string) {
+  return s?.replace('T', ' ').slice(0, 16) ?? '—'
+}
+
 onMounted(load)
 </script>
 
 <template>
   <div class="page">
-    <div class="page-header">
-      <div>
-        <div class="page-title">工具审批</div>
-        <div class="page-sub">Agent 调用敏感工具时会请求人工审批，你可允许、拒绝或返回自定义消息。</div>
-      </div>
-      <div class="row">
-        <button class="btn" :class="{ 'btn-primary': tab === 'pending' }" @click="tab = 'pending'">
-          待处理<span v-if="pending.length"> ({{ pending.length }})</span>
-        </button>
-        <button class="btn" :class="{ 'btn-primary': tab === 'history' }" @click="tab = 'history'">历史</button>
-      </div>
-    </div>
+    <PageHeader title="工具审批" subtitle="Agent 调用敏感工具时会请求人工审批，你可允许、拒绝或返回自定义消息。">
+      <template #actions>
+        <div class="tab-switch">
+          <button class="tab-btn" :class="{ active: tab === 'pending' }" @click="tab = 'pending'">
+            待处理<template v-if="pending.length"> ({{ pending.length }})</template>
+          </button>
+          <button class="tab-btn" :class="{ active: tab === 'history' }" @click="tab = 'history'">历史</button>
+        </div>
+      </template>
+    </PageHeader>
 
     <!-- 待处理 -->
-    <div v-if="tab === 'pending'" class="card">
-      <div v-if="loading" class="empty">加载中…</div>
-      <div v-else-if="!pending.length" class="empty">没有待处理的审批。</div>
-      <table v-else class="table">
-        <thead>
-          <tr>
-            <th>Agent</th>
-            <th>工具</th>
-            <th>输入摘要</th>
-            <th>时间</th>
-            <th style="width: 240px">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="a in pending" :key="a.approval_id">
-            <td>{{ a.agent_name || '#' + a.agent_id }}</td>
-            <td class="mono">{{ a.tool_name || '#' + a.tool_id }}</td>
-            <td class="text-weak">{{ a.input_summary }}</td>
-            <td class="text-weak">{{ a.created_at }}</td>
-            <td>
-              <div class="row" style="gap: 6px">
-                <button
-                  class="btn btn-sm btn-primary"
-                  :disabled="handling"
-                  @click="handle(a, APPROVAL_ACTION.ALLOW)"
-                >
-                  允许
-                </button>
-                <button
-                  class="btn btn-sm btn-danger"
-                  :disabled="handling"
-                  @click="handle(a, APPROVAL_ACTION.DENY)"
-                >
-                  拒绝
-                </button>
-                <button class="btn btn-sm" :disabled="handling" @click="openCustom(a)">自定义</button>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <template v-if="tab === 'pending'">
+      <div v-if="loading" class="grid">
+        <AppSkeleton v-for="i in 3" :key="i" variant="rect" height="130px" />
+      </div>
+
+      <AppEmpty
+        v-else-if="!pending.length"
+        icon="◎"
+        title="没有待处理的审批"
+        description="当 Agent 请求调用敏感工具时，审批请求会出现在这里。"
+      />
+
+      <div v-else class="card">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Agent</th>
+              <th>工具</th>
+              <th>输入摘要</th>
+              <th>Claw</th>
+              <th>时间</th>
+              <th style="width: 220px">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="a in pending" :key="a.approval_id">
+              <td>{{ a.agent_name || '#' + a.agent_id }}</td>
+              <td>
+                <span class="mono">{{ a.tool_name || '#' + a.tool_id }}</span>
+              </td>
+              <td class="text-weak">{{ a.input_summary }}</td>
+              <td class="text-weak">#{{ a.claw_id }}</td>
+              <td class="text-weak">{{ fmtTime(a.created_at) }}</td>
+              <td>
+                <div class="row" style="gap: 6px">
+                  <AppButton size="sm" :disabled="handling" @click="handle(a, APPROVAL_ACTION.ALLOW)">允许</AppButton>
+                  <AppButton size="sm" variant="danger" :disabled="handling" @click="handle(a, APPROVAL_ACTION.DENY)">拒绝</AppButton>
+                  <AppButton size="sm" variant="ghost" :disabled="handling" @click="openCustom(a)">自定义</AppButton>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </template>
 
     <!-- 历史 -->
-    <div v-else class="card">
-      <div v-if="loading" class="empty">加载中…</div>
-      <div v-else-if="!history.length" class="empty">暂无历史记录。</div>
-      <table v-else class="table">
-        <thead>
-          <tr>
-            <th>Agent</th>
-            <th>工具</th>
-            <th>输入摘要</th>
-            <th>结果</th>
-            <th>状态</th>
-            <th>处理时间</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="a in history" :key="a.approval_id">
-            <td>{{ a.agent_name || '#' + a.agent_id }}</td>
-            <td class="mono">{{ a.tool_name || '#' + a.tool_id }}</td>
-            <td class="text-weak">{{ a.input_summary }}</td>
-            <td>
-              {{ actionText(a.action) }}
-              <span v-if="a.custom_message" class="text-weak">（{{ a.custom_message }}）</span>
-            </td>
-            <td><span class="tag" :class="statusText(a.status).cls">{{ statusText(a.status).text }}</span></td>
-            <td class="text-weak">{{ a.handled_at || '—' }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <template v-else>
+      <div v-if="loading" class="grid">
+        <AppSkeleton v-for="i in 3" :key="i" variant="rect" height="130px" />
+      </div>
 
-    <BaseModal v-model="showCustom" title="返回自定义消息">
+      <AppEmpty
+        v-else-if="!history.length"
+        icon="◎"
+        title="暂无历史记录"
+        description="已处理的审批将记录在这里。"
+      />
+
+      <div v-else class="card">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Agent</th>
+              <th>工具</th>
+              <th>输入摘要</th>
+              <th>结果</th>
+              <th>状态</th>
+              <th>处理时间</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="a in history" :key="a.approval_id">
+              <td>{{ a.agent_name || '#' + a.agent_id }}</td>
+              <td>
+                <span class="mono">{{ a.tool_name || '#' + a.tool_id }}</span>
+              </td>
+              <td class="text-weak">{{ a.input_summary }}</td>
+              <td>
+                {{ actionText(a.action) }}
+                <span v-if="a.custom_message" class="text-weak">（{{ a.custom_message }}）</span>
+              </td>
+              <td>
+                <AppTag :tone="statusText(a.status).tone">{{ statusText(a.status).text }}</AppTag>
+              </td>
+              <td class="text-weak">{{ fmtTime(a.handled_at ?? '') }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </template>
+
+    <!-- 自定义消息弹窗 -->
+    <AppModal :show="showCustom" title="返回自定义消息" width="480px" @close="showCustom = false">
       <div class="form-item">
         <label>自定义消息（将作为工具结果返回给 Agent）</label>
         <textarea v-model="customMsg" class="textarea" placeholder="输入要返回的内容…" />
       </div>
-      <template #footer>
-        <button class="btn" @click="showCustom = false">取消</button>
-        <button class="btn btn-primary" :disabled="handling" @click="submitCustom">提交</button>
+      <template #actions>
+        <AppButton variant="ghost" @click="showCustom = false">取消</AppButton>
+        <AppButton :loading="handling" @click="submitCustom">{{ handling ? '' : '提交' }}</AppButton>
       </template>
-    </BaseModal>
+    </AppModal>
   </div>
 </template>
+
+<style scoped>
+.tab-switch {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.tab-btn {
+  padding: 7px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: color 0.2s var(--ease-out), background 0.2s var(--ease-out);
+}
+.tab-btn:hover {
+  color: var(--text-primary);
+}
+.tab-btn.active {
+  color: var(--accent);
+  background: var(--accent-glow);
+}
+</style>
