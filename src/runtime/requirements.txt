@@ -2,7 +2,10 @@ fastapi
 uvicorn[standard]
 pydantic-settings
 python-dotenv
-langgraph
+# langgraph 系列锁定版本：>=0.5 的 langgraph-checkpoint-redis 将 from_conn_string
+# 改为 @contextmanager 同步上下文管理器（返回 _GeneratorContextManager），
+# checkpointer.py/main.py 已按此 API 适配，勿随意升级，否则启动编译会因类型校验失败。
+langgraph==1.2.11
 redis
 langchain
 langchain-openai
@@ -10,4 +13,5 @@ sqlalchemy
 pymysql
 oss2
 httpx
-langgraph-checkpoint-redis
+langgraph-checkpoint==4.2.0
+langgraph-checkpoint-redis==0.5.1

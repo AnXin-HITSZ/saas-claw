@@ -18,6 +18,7 @@
 import json
 import time
 import uuid
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import StreamingResponse
@@ -28,15 +29,24 @@ from pydantic import BaseModel
 from redis import asyncio as aioredis
 from typing import Any, AsyncIterator
 
-from .checkpointer import saver
+from . import checkpointer
 from .config import settings
 from .graph import build_claw_graph
 from .state import ClawState
 from .trace import append_event, build_span_tree
 
 
-app = FastAPI()
-_claw_graph = build_claw_graph().compile(checkpointer=saver)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """启动：打开 RedisSaver（新版 from_conn_string 是同步上下文管理器，with 打开并 setup
+    建索引），取得实例后注入 checkpointer.saver 并编译主图；退出时上下文关闭连接。"""
+    with checkpointer.open_saver() as saver:
+        checkpointer.saver = saver
+        app.state.claw_graph = build_claw_graph().compile(checkpointer=saver)
+        yield
+
+
+app = FastAPI(lifespan=lifespan)
 _kv = aioredis.from_url(settings.redis_url, decode_responses=True)
 
 
@@ -127,7 +137,7 @@ async def _touch_conversation(conversation_id: str) -> None:
 async def _update_conversation_meta(conversation_id: str) -> dict | None:
     """聊天结束：读 checkpointer 得消息数，更新会话元信息（尽力而为）。"""
     try:
-        snapshot = await _claw_graph.aget_state(_base_config(conversation_id))
+        snapshot = await app.state.claw_graph.aget_state(_base_config(conversation_id))
         messages = snapshot.values.get("messages", []) if snapshot.values else []
         last_message = messages[-1] if messages else None
         last_summary = _to_business_message(last_message)["content"][:100] if last_message else ""
@@ -173,7 +183,7 @@ async def chat_completions(req: ChatCompletionRequest, x_user_id: str | None = H
     async def gen():
         try:
             async for sse in _sse_stream(
-                    _claw_graph.astream(input_state, config, stream_mode=["messages", "updates"]),
+                    app.state.claw_graph.astream(input_state, config, stream_mode=["messages", "updates"]),
                     config,
             ):
                 yield sse
@@ -200,7 +210,7 @@ async def approvals_callback(body: ApprovalCallbackBody) -> StreamingResponse:
     async def gen():
         try:
             async for sse in _sse_stream(
-                _claw_graph.astream(
+                app.state.claw_graph.astream(
                     Command(resume=body.result), config, stream_mode=["messages", "updates"]
                 ),
                 config,
@@ -235,7 +245,7 @@ async def list_conversations() -> dict:
 
 @app.get("/v1/conversations/{conversation_id}/messages")
 async def get_conversation_messages(conversation_id: str) -> dict:
-    snapshot = await _claw_graph.aget_state(_base_config(conversation_id))
+    snapshot = await app.state.claw_graph.aget_state(_base_config(conversation_id))
     messages = snapshot.values.get("messages", []) if snapshot.values else []
     return {"conversation_id": conversation_id, "messages": [_to_business_message(m) for m in messages]}
 

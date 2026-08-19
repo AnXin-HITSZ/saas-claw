@@ -19,7 +19,7 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph.graph import START, END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
-from .checkpointer import saver
+from . import checkpointer  # saver 属性由 main.lifespan 注入，子图编译时动态读取
 from .router_node import router_node
 from .db import Agent
 from .state import ClawState
@@ -55,7 +55,7 @@ def _compile_react_subgraph(model_config: dict, tool_specs: list[dict]) -> Compi
         {"tools": "tools", END: END},
     )
     builder.add_edge("tools", "llm")
-    return builder.compile(checkpointer=saver)
+    return builder.compile(checkpointer=checkpointer.saver)
 
 
 _SUBGRAPH_TEMPLATES: dict[str, Callable[..., CompiledStateGraph]] = {
