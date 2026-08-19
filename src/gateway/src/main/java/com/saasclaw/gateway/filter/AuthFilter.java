@@ -83,10 +83,22 @@ public class AuthFilter implements GlobalFilter, Ordered {
             userMono = userId == null ? Mono.empty() : Mono.just(userId);
         }
 
+        // 注意：不可用 userMono.flatMap(authorize).switchIfEmpty(reject401) 这种写法！
+        // authorize 返回 chain.filter() 即 Mono<Void>（只 onComplete、不发射元素），
+        // switchIfEmpty 会把"正常链完成"误判为空流再触发 reject401，而此时响应已提交、
+        // headers 只读，抛 UnsupportedOperationException 导致 chunked 响应被硬断（浏览器丢响应体）。
         return userMono
-                .flatMap(userId -> authorize(exchange, chain, userId, requestId, path))
-                .switchIfEmpty(Mono.defer(() -> reject401(exchange, "token 无效或已过期")));
+                .defaultIfEmpty(INVALID_USER_ID)
+                .flatMap(userId -> {
+                    if (userId == null || userId < 0) {
+                        return reject401(exchange, "token 无效或已过期");
+                    }
+                    return authorize(exchange, chain, userId, requestId, path);
+                });
     }
+
+    /** 兜底占位：-1 不是合法 userId，用于统一 defaultIfEmpty 分支 */
+    private static final long INVALID_USER_ID = -1L;
 
     private Mono<Void> authorize(ServerWebExchange exchange, GatewayFilterChain chain,
                                  Long userId, String requestId, String path) {

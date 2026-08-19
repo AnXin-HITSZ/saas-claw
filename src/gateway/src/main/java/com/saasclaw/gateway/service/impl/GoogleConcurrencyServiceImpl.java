@@ -23,8 +23,8 @@ public class GoogleConcurrencyServiceImpl implements GoogleConcurrencyService {
     private int keyTimeoutSeconds;
 
     @Override
-    public boolean tryAcquire(Long orgId, String model) {
-        String key = buildKey(orgId, model);
+    public boolean tryAcquire(Long userId, String model) {
+        String key = buildKey(userId, model);
         try {
             Long result = redisManager.executeAcquireLua(
                     Collections.singletonList(key),
@@ -40,8 +40,8 @@ public class GoogleConcurrencyServiceImpl implements GoogleConcurrencyService {
     }
 
     @Override
-    public void release(Long orgId, String model) {
-        String key = buildKey(orgId, model);
+    public void release(Long userId, String model) {
+        String key = buildKey(userId, model);
         try {
             redisManager.executeReleaseLua(
                     Collections.singletonList(key)
@@ -52,8 +52,8 @@ public class GoogleConcurrencyServiceImpl implements GoogleConcurrencyService {
     }
 
     @Override
-    public String buildKey(Long orgId, String model) {
+    public String buildKey(Long userId, String model) {
         String modelLower = model != null ? model.toLowerCase() : "";
-        return "concurrency:" + orgId + ":" + modelLower;
+        return "concurrency:" + userId + ":" + modelLower;
     }
 }

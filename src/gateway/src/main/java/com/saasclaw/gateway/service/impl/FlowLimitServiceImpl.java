@@ -34,29 +34,29 @@ public class FlowLimitServiceImpl implements FlowLimitService {
     }
 
     @Override
-    public boolean isQpsAllowed(Long orgId, long qpsLimit) {
-        String hashTag = "qps:" + orgId;
+    public boolean isQpsAllowed(Long userId, long qpsLimit) {
+        String hashTag = "qps:" + userId;
         Long result = slidingWindow(hashTag, qpsLimit * 60, 1L);
         return result != null && result > 0;
     }
 
     @Override
-    public boolean isRpmAllowed(Long orgId, String model, long rpmLimit) {
-        String hashTag = "rpm:" + model.toLowerCase() + ":" + orgId;
+    public boolean isRpmAllowed(Long userId, String model, long rpmLimit) {
+        String hashTag = "rpm:" + model.toLowerCase() + ":" + userId;
         Long result = slidingWindow(hashTag, rpmLimit, 1L);
         return result != null && result > 0;
     }
 
     @Override
-    public boolean isTpmAllowed(Long orgId, String model, long tpmLimit, long estimatedTokens) {
-        String hashTag = "tpm:" + model.toLowerCase() + ":" + orgId;
+    public boolean isTpmAllowed(Long userId, String model, long tpmLimit, long estimatedTokens) {
+        String hashTag = "tpm:" + model.toLowerCase() + ":" + userId;
         Long result = slidingWindow(hashTag, tpmLimit, estimatedTokens);
         return result != null && result > 0;
     }
 
     @Override
-    public boolean isTpmBurstAllowed(Long orgId, String model, long estimatedTokens, long burstLimit, long totalThreshold) {
-        String hashTag = "burst:" + model.toLowerCase() + ":" + orgId;
+    public boolean isTpmBurstAllowed(Long userId, String model, long estimatedTokens, long burstLimit, long totalThreshold) {
+        String hashTag = "burst:" + model.toLowerCase() + ":" + userId;
         long currentSecond = System.currentTimeMillis() / 1000;
         int subWindowIndex = (int) (currentSecond % 10);
         double weight = (System.currentTimeMillis() % 1000) / 1000.0;

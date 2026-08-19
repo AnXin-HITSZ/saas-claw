@@ -47,8 +47,19 @@ public class ClawRoutingGatewayFilter implements GatewayFilter, Ordered {
         String query = requestUri.getRawQuery();
         String querySuffix = query == null ? "" : "?" + query;
 
+        // 注意：不可用 resolveTarget(...).flatMap(chain.filter).switchIfEmpty(reject) 写法！
+        // chain.filter 返回 Mono<Void>（只 onComplete、不发射元素），switchIfEmpty 会把正常链
+        // 完成误判为空流再触发 reject，此刻响应可能已提交 headers 只读，
+        // 抛 UnsupportedOperationException 导致 chunked 响应硬断。故用 defaultIfEmpty + flatMap 内分支。
         return routeResolverService.resolveTarget(userId, alias)
+                .defaultIfEmpty("")
                 .flatMap(base -> {
+                    if (base.isEmpty()) {
+                        return reject(
+                                exchange,
+                                HttpStatus.BAD_REQUEST,
+                                alias == null ? "claw not found" : "agent " + alias + " not found");
+                    }
                     try {
                         URI target = URI.create(base + path + querySuffix);
                         exchange.getAttributes().put(ServerWebExchangeUtils.GATEWAY_REQUEST_URL_ATTR, target);
@@ -58,11 +69,7 @@ public class ClawRoutingGatewayFilter implements GatewayFilter, Ordered {
                         log.error("illegal claw target uri", e);
                         return reject(exchange, HttpStatus.BAD_GATEWAY, "bad target");
                     }
-                })
-                .switchIfEmpty(Mono.defer(() -> reject(
-                        exchange,
-                        HttpStatus.BAD_REQUEST,
-                        alias == null ? "claw not found" : "agent " + alias + " not found")));
+                });
     }
 
     private Mono<Void> reject(ServerWebExchange exchange, HttpStatus status, String message) {

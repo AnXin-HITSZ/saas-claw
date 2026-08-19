@@ -1,7 +1,7 @@
 package com.saasclaw.gateway.service;
 
 public interface GoogleConcurrencyService {
-    boolean tryAcquire(Long orgId, String model);
-    void release(Long orgId, String model);
-    String buildKey(Long orgId, String model);
+    boolean tryAcquire(Long userId, String model);
+    void release(Long userId, String model);
+    String buildKey(Long userId, String model);
 }

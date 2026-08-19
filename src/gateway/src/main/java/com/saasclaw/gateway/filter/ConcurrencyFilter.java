@@ -28,7 +28,13 @@ public class ConcurrencyFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         }
 
-        Long orgId = 1L;
+        // 推理链路必经 AuthFilter(-95) 注入 userId；null 时安全兜底放行（理论不会发生）
+        Long userId = (Long) exchange.getAttributes().get("userId");
+        if (userId == null) {
+            log.warn("userId missing in /v1 request, skip concurrency control");
+            return chain.filter(exchange);
+        }
+
         String modelName = exchange.getAttributes().get("modelName").toString();
         String requestId = exchange.getAttributes().get("requestId").toString();
 
@@ -38,7 +44,7 @@ public class ConcurrencyFilter implements GlobalFilter, Ordered {
         if (productCode != null && deviceSn != null) {
             deviceKey = deviceConcurrencyService.buildDeviceKey(productCode, deviceSn);
             if (!deviceConcurrencyService.tryAcquire(productCode, deviceSn, requestId)) {
-                log.warn("Device concurrency limit exceeded for orgId={}, model={}", orgId, modelName);
+                log.warn("Device concurrency limit exceeded for userId={}, model={}", userId, modelName);
                 return getMono(
                         exchange,
                         HttpStatus.TOO_MANY_REQUESTS,
@@ -48,19 +54,19 @@ public class ConcurrencyFilter implements GlobalFilter, Ordered {
             exchange.getAttributes().put("deviceKey", deviceKey);
         }
 
-        boolean acquired = googleConcurrencyService.tryAcquire(orgId, modelName);
+        boolean acquired = googleConcurrencyService.tryAcquire(userId, modelName);
         if (!acquired) {
             if (deviceKey != null) {
                 deviceConcurrencyService.release(deviceKey, requestId);
             }
-            log.warn("Google concurrency limit exceeded for orgId={}, model={}", orgId, modelName);
+            log.warn("Google concurrency limit exceeded for userId={}, model={}", userId, modelName);
             return getMono(
                     exchange,
                     HttpStatus.TOO_MANY_REQUESTS,
                     "{\"status\":429,\"message\":\"Google concurrency limit exceeded\"}"
             );
         }
-        exchange.getAttributes().put("concurrencyKey", googleConcurrencyService.buildKey(orgId, modelName));
+        exchange.getAttributes().put("concurrencyKey", googleConcurrencyService.buildKey(userId, modelName));
 
         return chain.filter(exchange).doFinally(signal -> {
             if (exchange.getAttributes().get("deviceKey") != null) {
@@ -70,7 +76,7 @@ public class ConcurrencyFilter implements GlobalFilter, Ordered {
                 );
             }
             if (exchange.getAttributes().get("concurrencyKey") != null) {
-                googleConcurrencyService.release(orgId, modelName);
+                googleConcurrencyService.release(userId, modelName);
             }
         });
     }

@@ -19,8 +19,8 @@ public class RateLimitFilter implements GlobalFilter, Ordered {
     @Autowired
     private FlowLimitService flowLimitService;
 
-    @Value("${app.limiter.maxOrgQps:50}")
-    private long maxOrgQps;
+    @Value("${app.limiter.maxUserQps:50}")
+    private long maxUserQps;
 
     @Value("${app.limiter.rpmLimit:500}")
     private long rpmLimit;
@@ -42,24 +42,29 @@ public class RateLimitFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         }
 
-        Long orgId  = 1L;
+        // 推理链路必经 AuthFilter(-95) 注入 userId；null 时安全兜底放行（理论不会发生）
+        Long userId = (Long) exchange.getAttributes().get("userId");
+        if (userId == null) {
+            log.warn("userId missing in /v1 request, skip rate limit");
+            return chain.filter(exchange);
+        }
 
-        if (!flowLimitService.isQpsAllowed(orgId, maxOrgQps)) {
-            return reject(exchange, orgId, "QPS limit exceeded");
+        if (!flowLimitService.isQpsAllowed(userId, maxUserQps)) {
+            return reject(exchange, userId, "QPS limit exceeded");
         }
 
         String modelName = exchange.getAttributes().get("modelName").toString();
-        if (!flowLimitService.isRpmAllowed(orgId, modelName, rpmLimit)) {
-            return reject(exchange, orgId, "RPM limit exceeded");
+        if (!flowLimitService.isRpmAllowed(userId, modelName, rpmLimit)) {
+            return reject(exchange, userId, "RPM limit exceeded");
         }
 
         long estimatedTokens = Long.parseLong(exchange.getAttributes().get("estimatedTokens").toString());
-        if (!flowLimitService.isTpmAllowed(orgId, modelName, tpmLimit, estimatedTokens)) {
-            return reject(exchange, orgId, "TPM limit exceeded");
+        if (!flowLimitService.isTpmAllowed(userId, modelName, tpmLimit, estimatedTokens)) {
+            return reject(exchange, userId, "TPM limit exceeded");
         }
 
-        if (!flowLimitService.isTpmBurstAllowed(orgId, modelName, estimatedTokens, burstLimit, burstTotalThreshold)) {
-            return reject(exchange, orgId, "TPM Burst limit exceeded");
+        if (!flowLimitService.isTpmBurstAllowed(userId, modelName, estimatedTokens, burstLimit, burstTotalThreshold)) {
+            return reject(exchange, userId, "TPM Burst limit exceeded");
         }
 
         return chain.filter(exchange);
@@ -72,8 +77,8 @@ public class RateLimitFilter implements GlobalFilter, Ordered {
         return exchange.getResponse().writeWith(Mono.just(buffer));
     }
 
-    public Mono<Void> reject(ServerWebExchange exchange, Long orgId, String reason) {
-        log.warn("{} for orgId={}", reason, orgId);
+    public Mono<Void> reject(ServerWebExchange exchange, Long userId, String reason) {
+        log.warn("{} for userId={}", reason, userId);
         return getMono(
                 exchange,
                 HttpStatus.TOO_MANY_REQUESTS,
