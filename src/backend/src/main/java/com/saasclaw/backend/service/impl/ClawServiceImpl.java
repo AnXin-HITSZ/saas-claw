@@ -4,9 +4,11 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.saasclaw.backend.common.BizException;
 import com.saasclaw.backend.dto.ClawCreateRequest;
+import com.saasclaw.backend.entity.Agent;
 import com.saasclaw.backend.entity.Authorization;
 import com.saasclaw.backend.entity.Claw;
 import com.saasclaw.backend.k8s.ClawProvisioner;
+import com.saasclaw.backend.mapper.AgentMapper;
 import com.saasclaw.backend.mapper.AuthorizationMapper;
 import com.saasclaw.backend.mapper.ClawMapper;
 import com.saasclaw.backend.service.ClawService;
@@ -26,6 +28,7 @@ public class ClawServiceImpl implements ClawService {
     public static final String CLAW_CHANNEL_KEY_NAME_PREFIX = "claw-channel-";
 
     private final ClawMapper clawMapper;
+    private final AgentMapper agentMapper;
     private final AuthorizationMapper authorizationMapper;
     private final ClawProvisioner clawProvisioner;
 
@@ -93,6 +96,15 @@ public class ClawServiceImpl implements ClawService {
                 new LambdaUpdateWrapper<Claw>()
                         .eq(Claw::getId, id)
                         .set(Claw::getStatus, 0)
+        );
+
+        // 级联软删该 Claw 下全部 Agent（自建与商店安装均绑定 claw_id，一并失效），
+        // 与 Claw/Agent 现有软删语义一致；Agent 软删后界面列表不再展示，路由解析亦不可达。
+        agentMapper.update(null,
+                new LambdaUpdateWrapper<Agent>()
+                        .eq(Agent::getUserId, userId)
+                        .eq(Agent::getClawId, id)
+                        .set(Agent::getStatus, 0)
         );
 
         // 吊销该 Claw 的程序通道 key：Claw 已软删，其 Pod 将不存在，旧 key 立即失效
