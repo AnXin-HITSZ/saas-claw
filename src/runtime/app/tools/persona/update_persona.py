@@ -1,8 +1,13 @@
-"""人格工具域：update_persona —— 追加修订 Agent 人格文件（写 backend，本 Pod 只读源）。"""
+"""人格写工具：update_persona —— 向 Agent 人格文件追加修订（写 backend 持久化，本 Pod 不落盘）。
+
+定位：与 read_persona 配对的写侧。人格文件（SOUL/IDENTITY/AGENTS）是 Agent 行为基线，
+本 Pod 只读、不直接写 OSS，追加内容经 backend 程序通道落库持久化。
+修改前应先 read_persona 拿原文格式基线，再基于真实内容追加；单次上限 16KB。默认敏感，经审批门。
+"""
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
-from .registry import register_tool, get_state
+from ..registry import register_tool, get_state
 
 
 _ALLOWED_FILES = {"SOUL.md", "IDENTITY.md", "AGENTS.md"}
@@ -24,7 +29,7 @@ async def update_persona(file_name: str, content: str, *, config: RunnableConfig
     if len(content.encode("utf-8")) > _CONTENT_LIMIT:
         return f"内容超长（上限 {_CONTENT_LIMIT // 1024}KB），已拒绝。"
     try:
-        from ..http import post_multipart
+        from ...http import post_multipart
 
         await post_multipart(
             "/tools/agent-files",

@@ -1,8 +1,10 @@
 package com.saasclaw.backend.controller;
 
 import com.saasclaw.backend.common.Result;
+import com.saasclaw.backend.config.RequireAdmin;
 import com.saasclaw.backend.dto.CreateApprovalRequest;
-import com.saasclaw.backend.dto.ToolSyncItem;
+import com.saasclaw.backend.dto.CreateToolRequest;
+import com.saasclaw.backend.dto.UpdateToolRequest;
 import com.saasclaw.backend.entity.Tool;
 import com.saasclaw.backend.service.ApprovalEventBus;
 import com.saasclaw.backend.service.ToolApprovalService;
@@ -26,16 +28,38 @@ public class ToolController {
     private final ToolApprovalService toolApprovalService;
     private final ApprovalEventBus approvalEventBus;
 
-    /** 登录用户可看（AuthInterceptor 兜底 JWT 鉴权） */
+    /** 启用工具清单（登录用户可看，AuthInterceptor 兜底 JWT 鉴权） */
     @GetMapping
     public Result<List<Tool>> list() {
         return Result.ok(toolService.list());
     }
 
-    /** 程序通道：Claw Pod 同步工具（ApiKeyInterceptor 兜底 API Key 鉴权） */
-    @PostMapping("/sync")
-    public Result<Void> sync(@Valid @RequestBody List<ToolSyncItem> items) {
-        toolService.sync(items);
+    // ---------- 工具配置（管理员 role=1，前端工具页管理） ----------
+
+    /** 全部工具（含停用），供管理页展示 */
+    @GetMapping("/all")
+    @RequireAdmin
+    public Result<List<Tool>> listAll() {
+        return Result.ok(toolService.listAll());
+    }
+
+    @PostMapping
+    @RequireAdmin
+    public Result<Tool> create(@Valid @RequestBody CreateToolRequest request) {
+        return Result.ok(toolService.create(request));
+    }
+
+    @PutMapping("/{id}")
+    @RequireAdmin
+    public Result<Tool> update(@PathVariable Long id,
+                               @Valid @RequestBody UpdateToolRequest request) {
+        return Result.ok(toolService.update(id, request));
+    }
+
+    @DeleteMapping("/{id}")
+    @RequireAdmin
+    public Result<Void> remove(@PathVariable Long id) {
+        toolService.remove(id);
         return Result.ok();
     }
 

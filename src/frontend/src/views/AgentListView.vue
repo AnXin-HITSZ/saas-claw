@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { agentApi, clawApi, skillApi, ApiError } from '@/api'
 import type { Agent, Claw, Skill, AgentFileVO } from '@/types/api'
 import { useToast } from '@/composables/useToast'
@@ -250,7 +251,16 @@ function fmtSize(b: number) {
   return `${(b / 1024 / 1024).toFixed(2)} MB`
 }
 
-onMounted(loadAll)
+const route = useRoute()
+
+onMounted(async () => {
+  await loadAll()
+  // 支持从 Claw 卡片跳转 ?claw=<id>：数据就绪后初始化筛选
+  const q = Number(route.query.claw)
+  if (q && claws.value.some((c) => c.id === q)) {
+    filterClawId.value = q
+  }
+})
 </script>
 
 <template>

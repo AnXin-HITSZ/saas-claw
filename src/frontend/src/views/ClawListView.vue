@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { clawApi, ApiError } from '@/api'
-import type { Claw } from '@/types/api'
+import { agentApi, clawApi, ApiError } from '@/api'
+import type { Agent, Claw } from '@/types/api'
 import { useToast } from '@/composables/useToast'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import AppButton from '@/components/ui/AppButton.vue'
@@ -22,12 +22,15 @@ const removing = ref<Claw | null>(null)
 const removingLoading = ref(false)
 
 const runningCount = computed(() => list.value.filter((c) => c.status === 1).length)
-const agentCount = computed(() => list.value.length) // 占位：Agent 数由 AgentListView 展示
+const agents = ref<Agent[]>([])
+const agentsOf = (c: Claw) => agents.value.filter((a) => a.claw_id === c.id)
 
 async function load() {
   loading.value = true
   try {
-    list.value = await clawApi.list()
+    const [c, a] = await Promise.all([clawApi.list(), agentApi.list()])
+    list.value = c
+    agents.value = a
   } catch (e) {
     toast.error(e instanceof ApiError ? e.message : '加载失败')
   } finally {
@@ -94,10 +97,6 @@ onMounted(load)
         <div class="stat-value success">{{ runningCount }}</div>
         <div class="stat-label">运行中</div>
       </div>
-      <div class="stat-card">
-        <div class="stat-value">{{ agentCount }}</div>
-        <div class="stat-label">部署 Agent</div>
-      </div>
     </div>
 
     <!-- 加载骨架 -->
@@ -142,11 +141,32 @@ onMounted(load)
           </div>
 
           <div class="card-meta">
-            <span class="meta-item">ID <span class="mono">#{{ c.id }}</span></span>
-            <span class="meta-item">创建 <span class="mono">{{ fmtTime(c.created_at) }}</span></span>
-          </div>
+        <span class="meta-item">ID <span class="mono">#{{ c.id }}</span></span>
+        <span class="meta-item">创建 <span class="mono">{{ fmtTime(c.created_at) }}</span></span>
+      </div>
 
-          <div class="card-actions">
+      <div class="card-agents">
+        <div class="card-agents-head">
+          <span class="card-agents-label">Agent</span>
+          <span class="card-agents-count">{{ agentsOf(c).length }}</span>
+        </div>
+        <div v-if="agentsOf(c).length" class="agents-scroll">
+          <RouterLink
+            v-for="a in agentsOf(c)"
+            :key="a.id"
+            class="agent-chip"
+            :class="{ off: a.status !== 1 }"
+            :to="{ name: 'agents', query: { claw: c.id } }"
+            :title="`${a.alias} · ${a.status === 1 ? '启用' : '停用'}`"
+          >
+            <span class="chip-name">{{ a.name }}</span>
+            <span class="chip-alias">@{{ a.alias }}</span>
+          </RouterLink>
+        </div>
+        <div v-else class="agents-empty">暂无 Agent</div>
+      </div>
+
+      <div class="card-actions">
             <AppButton variant="ghost" size="sm" @click="removing = c">删除</AppButton>
           </div>
         </div>
@@ -231,6 +251,73 @@ onMounted(load)
   border-top: 1px dashed var(--border);
   font-size: 12px;
   color: var(--text-muted);
+}
+
+/* Agent 横滑区：flex 不换行 + overflow-x 滚动，Agent 再多也不撑高卡片 */
+.card-agents {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+.card-agents-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.card-agents-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.card-agents-count {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.agents-scroll {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 2px 10px;
+  scrollbar-width: thin;
+}
+.agents-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 2px 0 6px;
+}
+.agent-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-deep);
+  text-decoration: none;
+  transition: border-color 0.2s var(--ease-out), color 0.2s var(--ease-out);
+}
+.agent-chip:hover {
+  border-color: var(--accent);
+}
+.agent-chip.off {
+  opacity: 0.45;
+}
+.chip-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+.chip-alias {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--accent);
+  white-space: nowrap;
 }
 .card-actions {
   display: flex;

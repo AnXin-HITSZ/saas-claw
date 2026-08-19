@@ -1,13 +1,14 @@
 package com.saasclaw.backend.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.saasclaw.backend.dto.ToolSyncItem;
+import com.saasclaw.backend.common.BizException;
+import com.saasclaw.backend.dto.CreateToolRequest;
+import com.saasclaw.backend.dto.UpdateToolRequest;
 import com.saasclaw.backend.entity.Tool;
 import com.saasclaw.backend.mapper.ToolMapper;
 import com.saasclaw.backend.service.ToolService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -18,35 +19,56 @@ public class ToolServiceImpl implements ToolService {
     private final ToolMapper toolMapper;
 
     @Override
-    @Transactional
-    public void sync(List<ToolSyncItem> items) {
-        for (ToolSyncItem item : items) {
-            Tool existing = toolMapper.selectOne(
-                    new LambdaQueryWrapper<Tool>().eq(Tool::getName, item.getName()));
-            if (existing != null) {
-                // 代码权威：已存在的工具只更新元数据，status 由平台控制保持不变
-                existing.setDescription(item.getDescription());
-                existing.setSchemaJson(item.getSchemaJson());
-                existing.setIsSensitive(item.getIsSensitive());
-                toolMapper.updateById(existing);
-            } else {
-                Tool tool = new Tool();
-                tool.setName(item.getName());
-                tool.setDescription(item.getDescription());
-                tool.setSchemaJson(item.getSchemaJson());
-                tool.setIsSensitive(item.getIsSensitive() == null ? 0 : item.getIsSensitive());
-                tool.setStatus(1);
-                toolMapper.insert(tool);
-            }
-        }
-    }
-
-    @Override
     public List<Tool> list() {
         return toolMapper.selectList(
                 new LambdaQueryWrapper<Tool>()
                         .eq(Tool::getStatus, 1)
-                        .orderByDesc(Tool::getId)
-        );
+                        .orderByDesc(Tool::getId));
+    }
+
+    @Override
+    public List<Tool> listAll() {
+        return toolMapper.selectList(
+                new LambdaQueryWrapper<Tool>().orderByDesc(Tool::getId));
+    }
+
+    @Override
+    public Tool create(CreateToolRequest request) {
+        Long count = toolMapper.selectCount(
+                new LambdaQueryWrapper<Tool>().eq(Tool::getName, request.getName()));
+        if (count > 0) {
+            throw new BizException(409, "工具名已存在");
+        }
+        Tool tool = new Tool();
+        tool.setName(request.getName());
+        tool.setDescription(request.getDescription());
+        tool.setSchemaJson(request.getSchemaJson());
+        tool.setIsSensitive(request.getIsSensitive() == null ? 0 : request.getIsSensitive());
+        tool.setStatus(request.getStatus() == null ? 1 : request.getStatus());
+        toolMapper.insert(tool);
+        return tool;
+    }
+
+    @Override
+    public Tool update(Long id, UpdateToolRequest request) {
+        Tool tool = toolMapper.selectById(id);
+        if (tool == null) {
+            throw new BizException(404, "工具不存在");
+        }
+        if (request.getDescription() != null) tool.setDescription(request.getDescription());
+        if (request.getSchemaJson() != null) tool.setSchemaJson(request.getSchemaJson());
+        if (request.getIsSensitive() != null) tool.setIsSensitive(request.getIsSensitive());
+        if (request.getStatus() != null) tool.setStatus(request.getStatus());
+        toolMapper.updateById(tool);
+        return tool;
+    }
+
+    @Override
+    public void remove(Long id) {
+        Tool tool = toolMapper.selectById(id);
+        if (tool == null) {
+            throw new BizException(404, "工具不存在");
+        }
+        toolMapper.deleteById(id);
     }
 }

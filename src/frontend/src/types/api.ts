@@ -184,8 +184,25 @@ export interface Tool {
   description: string | null
   schema_json: string | null
   is_sensitive: number
+  status: number
   created_at: string
   updated_at: string
+}
+
+/** 管理员创建工具；name 须与 runtime 已注册的 @tool 名一致，否则不可执行 */
+export interface ToolCreateRequest {
+  name: string
+  description?: string
+  schema_json?: string
+  is_sensitive?: number
+  status?: number
+}
+
+export interface ToolUpdateRequest {
+  description?: string
+  schema_json?: string
+  is_sensitive?: number
+  status?: number
 }
 
 // ---------------- Agent 市场 ----------------
@@ -303,6 +320,8 @@ export interface ChatCompletionRequest {
   messages: ChatMessage[]
   /** 前端生成的会话 uuid，贯穿一次会话 */
   conversation_id: string
+  /** 显式 agent alias，供 runtime prepare 精确解析（与 model 一致；缺省时 runtime 走 router） */
+  alias?: string
   stream?: boolean
 }
 export interface ConversationMeta {

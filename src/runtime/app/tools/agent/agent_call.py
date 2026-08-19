@@ -5,9 +5,9 @@ from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
-from ..db import get_agent_by_id
-from ..graph import _assemble_agent, get_agent_subgraph
-from .registry import register_tool, get_state
+from ...db import get_agent_by_id
+from ...graph import _assemble_agent, get_agent_subgraph
+from ...tools.registry import register_tool, get_state
 
 
 _DEPTH_LIMIT = 3  # 环检测：调用链最大深度（根 Agent 为 0）

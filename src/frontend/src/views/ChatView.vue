@@ -101,6 +101,7 @@ async function send() {
   await chatApi.streamChat(
     {
       model: selectedAlias.value,
+      alias: selectedAlias.value,
       messages: [{ role: 'user', content: userText }],
       conversation_id: currentConv.value,
     },

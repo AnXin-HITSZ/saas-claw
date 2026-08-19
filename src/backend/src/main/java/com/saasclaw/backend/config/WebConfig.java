@@ -14,18 +14,17 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        // 人工通道（JWT）：排除登录、注册、错误页，以及程序通道 /tools/sync、/tools/approval-requests/**
+        // 人工通道（JWT）：排除登录、注册、错误页，以及程序通道 /tools/approval-requests/**
         registry.addInterceptor(authInterceptor)
                 .addPathPatterns("/**")
                 .excludePathPatterns(
                         "/auth/register",
                         "/auth/login",
-                        "/tools/sync",
                         "/tools/approval-requests/**",
                         "/error"
                 );
-        // 程序通道（API Key）：工具同步 + 敏感工具审批请求
+        // 程序通道（API Key）：敏感工具审批请求
         registry.addInterceptor(apiKeyInterceptor)
-                .addPathPatterns("/tools/sync", "/tools/approval-requests/**");
+                .addPathPatterns("/tools/approval-requests/**");
     }
 }

@@ -1,50 +1,21 @@
 package com.saasclaw.gateway.rewrite;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.saasclaw.gateway.entity.ModelConfig;
-import com.saasclaw.gateway.mapper.ModelConfigMapper;
-import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.reactivestreams.Publisher;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.gateway.filter.factory.rewrite.RewriteFunction;
 import org.springframework.http.HttpStatus;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.nio.charset.StandardCharsets;
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Slf4j
 @Component
 public class BodyRewriteFunction implements RewriteFunction<byte[], byte[]> {
-    @Autowired
-    private ModelConfigMapper modelConfigMapper;
-
-    private Set<String> supportedModels = ConcurrentHashMap.newKeySet();
-
-    @PostConstruct
-    public void init() {
-        refreshModels();
-    }
-
-    @Scheduled(cron = "0 0/3 * * * ?")
-    public void refreshModels() {
-        List<ModelConfig> models = modelConfigMapper.selectList(
-                new LambdaQueryWrapper<ModelConfig>().eq(ModelConfig::getStatus, 1)
-        );
-        supportedModels.clear();
-        // 校验集合用逻辑标识 name（agent.base_model / 请求体 model 引用它），不是供应商侧 model_name
-        models.forEach(m -> supportedModels.add(m.getName()));
-        log.info("refreshed model list: {}", supportedModels);
-    }
 
     @Override
     public Publisher<byte[]> apply(ServerWebExchange exchange, byte[] bytes) {
@@ -60,11 +31,9 @@ public class BodyRewriteFunction implements RewriteFunction<byte[], byte[]> {
         long eTokens = estimateTokens(body);
         exchange.getAttributes().put("estimatedTokens", eTokens);
 
-        if (!supportedModels.contains(modelName)) {
-            log.error("model {} is not supported", modelName);
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "model " + modelName + " is not supported");
-        }
-
+        // 注意：请求体 model 字段承载的是 agent alias（saas-claw 语义，前端 chat.ts / ClawRouting 均按
+        // alias 消费），不是 model_config.name 模型逻辑名——两者是不同命名空间，故此处不做白名单校验。
+        // alias 合法性由 ClawRouting 解析（alias 无效 / 未启用 Claw 时返回 400 agent not found）。
         String requestId = exchange.getAttributes().get("requestId").toString();
         long startTime = Long.parseLong(exchange.getAttributes().get("startTime").toString());
 

@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     claw_id: int = 0
     namespace: str = "claw-0"
 
+    # ---- 沙箱工作区根（K8s Deployment 注入，须与 K8sProperties.workspaceRoot 一致）----
+    # 沙箱工具只允许在此目录内操作；越界路径一律拒绝。
+    workspace_root: str = "/workspace"
+
     # 模型默认值（被 model_config 表按 agent 覆盖）
     default_model: str = "deepseek-v4-flash"
 
