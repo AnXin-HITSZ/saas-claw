@@ -38,9 +38,10 @@ from .trace import append_event, build_span_tree
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """启动：打开 RedisSaver（新版 from_conn_string 是同步上下文管理器，with 打开并 setup
-    建索引），取得实例后注入 checkpointer.saver 并编译主图；退出时上下文关闭连接。"""
-    with checkpointer.open_saver() as saver:
+    """启动：打开 AsyncRedisSaver（from_conn_string 是异步上下文管理器，async with 打开时
+    __aenter__ 自动 setup 建索引），取得实例后注入 checkpointer.saver 并编译主图；
+    退出时上下文关闭连接。"""
+    async with checkpointer.open_saver_cm() as saver:
         checkpointer.saver = saver
         app.state.claw_graph = build_claw_graph().compile(checkpointer=saver)
         yield
