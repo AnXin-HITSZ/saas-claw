@@ -41,7 +41,8 @@ public class BodyRewriteFunction implements RewriteFunction<byte[], byte[]> {
                 new LambdaQueryWrapper<ModelConfig>().eq(ModelConfig::getStatus, 1)
         );
         supportedModels.clear();
-        models.forEach(m -> supportedModels.add(m.getModelName()));
+        // 校验集合用逻辑标识 name（agent.base_model / 请求体 model 引用它），不是供应商侧 model_name
+        models.forEach(m -> supportedModels.add(m.getName()));
         log.info("refreshed model list: {}", supportedModels);
     }
 
