@@ -217,7 +217,7 @@ onMounted(load)
               <h3 class="mono">{{ t.name }}</h3>
               <span class="meta-line">#{{ t.id }}</span>
             </div>
-            <AppTag :tone="statusTone(t)" :pulse="t.status === 1 && t.is_sensitive">
+            <AppTag :tone="statusTone(t)" :pulse="t.status === 1 && t.is_sensitive === 1">
               {{ statusText(t) }}
             </AppTag>
           </div>
