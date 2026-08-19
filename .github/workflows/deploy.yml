@@ -76,8 +76,10 @@ jobs:
 
             # 1) 先把 runtime 镜像地址写进 ConfigMap（新建 Claw Pod 会用它）。
             #    必须先于 backend 的 set image——backend 新 pod 创建时才解析 ConfigMap 最新值。
-            k3s kubectl -n saas-claw set env configmap/saas-claw-config \
-              CLAW_K8S_RUNTIME_IMAGE="$REG/runtime:$SHA"
+            #    注意：kubectl set env 只支持带 pod template 的对象，ConfigMap 须用 patch 更新数据键。
+            k3s kubectl -n saas-claw patch configmap saas-claw-config \
+              --type merge \
+              -p '{"data":{"CLAW_K8S_RUNTIME_IMAGE":"'"$REG/runtime:$SHA"'"}}'
 
             # 2) 三个常驻服务指向新 SHA 触发滚动更新（deployment名 容器名=镜像）
             k3s kubectl -n saas-claw set image deployment/backend  backend="$REG/backend:$SHA"
