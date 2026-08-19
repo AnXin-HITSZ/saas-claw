@@ -1,6 +1,10 @@
 server:
   port: 8888
 
+jwt:
+  # 与 backend 同一把 key：线上由 Secret 注入 JWT_SECRET 覆盖，此处为本地兜底（与 backend application.yaml 保持一致）
+  secret: ${JWT_SECRET:saas-claw-jwt-secret}
+
 spring:
   application:
     name: gateway

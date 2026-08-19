@@ -2,6 +2,7 @@ package com.saasclaw.gateway.config;
 
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -10,6 +11,7 @@ import java.util.List;
  * 认证相关配置。白名单路径（无需鉴权，直接透传 backend），Ant 风格匹配。
  */
 @Data
+@Component
 @ConfigurationProperties(prefix = "app.auth")
 public class AuthProperties {
 
