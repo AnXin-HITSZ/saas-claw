@@ -36,6 +36,12 @@ public class RateLimitFilter implements GlobalFilter, Ordered {
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+        // 限流针对推理链路(/v1/**，按 modelName 计 QPS/RPM/TPM)；
+        // 非 /v1 的认证/管理请求没有 modelName attribute，直接放行，否则会 NPE。
+        if (!exchange.getRequest().getPath().value().startsWith("/v1/")) {
+            return chain.filter(exchange);
+        }
+
         Long orgId  = 1L;
 
         if (!flowLimitService.isQpsAllowed(orgId, maxOrgQps)) {

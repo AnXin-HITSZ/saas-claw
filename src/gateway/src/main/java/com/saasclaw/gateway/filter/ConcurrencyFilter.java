@@ -23,6 +23,11 @@ public class ConcurrencyFilter implements GlobalFilter, Ordered {
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+        // 并发控制针对推理链路(/v1/**)；非 /v1 请求没有 modelName attribute，直接放行，否则 NPE。
+        if (!exchange.getRequest().getPath().value().startsWith("/v1/")) {
+            return chain.filter(exchange);
+        }
+
         Long orgId = 1L;
         String modelName = exchange.getAttributes().get("modelName").toString();
         String requestId = exchange.getAttributes().get("requestId").toString();
