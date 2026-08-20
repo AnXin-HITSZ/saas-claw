@@ -13,6 +13,7 @@ import com.saasclaw.backend.mapper.ClawMapper;
 import com.saasclaw.backend.mapper.ToolApprovalMapper;
 import com.saasclaw.backend.mapper.ToolMapper;
 import com.saasclaw.backend.service.ApprovalEventBus;
+import com.saasclaw.backend.service.RuntimeCallbackService;
 import com.saasclaw.backend.service.ToolApprovalService;
 import com.saasclaw.backend.vo.ApprovalRequestVO;
 import com.saasclaw.backend.vo.ApprovalResultVO;
@@ -40,6 +41,7 @@ public class ToolApprovalServiceImpl implements ToolApprovalService {
     private final AgentMapper agentMapper;
     private final ClawMapper clawMapper;
     private final ApprovalEventBus eventBus;
+    private final RuntimeCallbackService runtimeCallbackService;
 
     @Override
     public ApprovalRequestVO create(Long userId, CreateApprovalRequest request) {
@@ -144,6 +146,9 @@ public class ToolApprovalServiceImpl implements ToolApprovalService {
 
         // Redis 广播：所有实例收到，连接所在实例推送 SSE
         eventBus.publish(record.getRequestId(), toResultVO(record));
+
+        // 回调 runtime 恢复挂起的图执行（之前漏接，审批后 runtime 一直挂起不恢复）
+        runtimeCallbackService.notifyApproval(record.getClawId(), toResultVO(record));
     }
 
     // ---- helpers ----

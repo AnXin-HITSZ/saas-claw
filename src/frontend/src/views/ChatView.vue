@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { agentApi, chatApi, ApiError } from '@/api'
-import type { Agent, ChatMessage, ConversationMeta } from '@/types/api'
+import type { Agent, ConversationMeta, TraceEvent, TraceItem } from '@/types/api'
 import { useToast } from '@/composables/useToast'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppSelect, { type SelectOption } from '@/components/ui/AppSelect.vue'
@@ -15,10 +15,21 @@ const selectedAlias = ref<string>('')
 const conversations = ref<ConversationMeta[]>([])
 const currentConv = ref<string>('')
 
-const messages = ref<ChatMessage[]>([])
+// 统一时间轴：消息 + 过程事件（重开会话时用 /trace 的 items 初始化）
+type TimelineEntry =
+  | { kind: 'message'; role: 'user' | 'assistant' | 'system' | 'tool'; content: string }
+  | { kind: 'event'; event: TraceEvent }
+
+const timeline = ref<TimelineEntry[]>([])
+const liveEvents = ref<TraceEvent[]>([]) // 本轮实时过程事件
+const liveUser = ref('') // 本轮用户消息
+const liveAssistant = ref('') // 本轮 assistant 流式内容
 const input = ref('')
 const streaming = ref(false)
 const abortCtrl = ref<AbortController | null>(null)
+// 会话/流代次：openConversation/newConversation 时自增，作废旧会话在途流的回调
+// （否则切换后旧流 chunk 仍写入新会话时间轴）
+let streamGen = 0
 const bodyRef = ref<HTMLElement | null>(null)
 
 const agentOptions = computed<SelectOption[]>(() =>
@@ -66,22 +77,109 @@ async function loadConversations() {
   }
 }
 
+// 把 /trace 的 items（消息+事件混合）转成统一时间轴，过滤内部轮次边界事件
+function itemsToTimeline(items: TraceItem[]): TimelineEntry[] {
+  return items
+    .filter((it) => it.kind !== 'event' || (it.type !== 'chat_start' && it.type !== 'chat_end'))
+    .map((it) =>
+      it.kind === 'message'
+        ? { kind: 'message' as const, role: normRole(it.role), content: it.content }
+        : { kind: 'event' as const, event: it },
+    )
+}
+
 async function openConversation(id: string) {
+  // 切会话：中断在途流 + 作废旧流回调，避免旧会话增量串入新会话时间轴
+  abortCtrl.value?.abort()
+  abortCtrl.value = null
+  streamGen++
+  streaming.value = false
   currentConv.value = id
-  messages.value = []
+  timeline.value = []
+  liveEvents.value = []
+  liveUser.value = ''
+  liveAssistant.value = ''
   try {
-    const res = await chatApi.getMessages(id)
-    messages.value = res.messages.map((m) => ({ role: normRole(m.role), content: m.content }))
+    // 单接口时间轴：/trace 的 items 已合并消息与过程事件
+    const res = await chatApi.getTrace(id)
+    timeline.value = itemsToTimeline(res.items || [])
     await scrollBottom()
   } catch (e) {
-    toast.error(e instanceof ApiError ? e.message : '加载消息失败')
+    // 兜底：trace 失败退回 messages
+    try {
+      const res = await chatApi.getMessages(id)
+      timeline.value = res.messages.map((m) => ({
+        kind: 'message' as const,
+        role: normRole(m.role),
+        content: m.content,
+      }))
+    } catch (e2) {
+      toast.error(e2 instanceof ApiError ? e2.message : '加载会话失败')
+    }
+    await scrollBottom()
   }
 }
 
 function newConversation() {
+  // 新对话：同样中断在途流 + 作废旧流回调（与 openConversation 一致）
+  abortCtrl.value?.abort()
+  abortCtrl.value = null
+  streamGen++
+  streaming.value = false
   currentConv.value = uuid()
-  messages.value = []
+  timeline.value = []
+  liveEvents.value = []
+  liveUser.value = ''
+  liveAssistant.value = ''
   input.value = ''
+}
+
+// 过程事件卡元信息：按 type/data 派生图标/标题/摘要/色调
+function eventMeta(ev: TraceEvent): {
+  icon: string
+  title: string
+  subtitle: string
+  tone: 'info' | 'success' | 'warning'
+} {
+  const d = (ev.data || {}) as Record<string, any>
+  switch (ev.type) {
+    case 'tool_start':
+      return { icon: '⚙', title: `工具 · ${d.tool ?? ''}`, subtitle: d.args_summary ?? '', tone: 'info' }
+    case 'tool_end':
+      return { icon: '⚙', title: `工具 · ${d.tool ?? ''} 完成`, subtitle: d.result_summary ?? '', tone: 'success' }
+    case 'subagent_start':
+      return {
+        icon: '⟳',
+        title: `子任务 · ${d.name ?? (d.agent_id ? '#' + d.agent_id : '')}`,
+        subtitle: d.task ?? '',
+        tone: 'info',
+      }
+    case 'subagent_end':
+      return { icon: '⟳', title: '子任务完成', subtitle: d.status === 'done' ? '已完成' : '', tone: 'success' }
+    case 'approval_pending':
+      return {
+        icon: '⏸',
+        title: '审批挂起',
+        subtitle: d.tools?.length ? d.tools.join('、') : d.tool ?? d.request_id ?? '',
+        tone: 'warning',
+      }
+    case 'approval_resolved':
+      return { icon: '✓', title: `审批完成（${d.decision ?? ''}）`, subtitle: d.reason ?? '', tone: 'success' }
+    default:
+      return { icon: '•', title: ev.type, subtitle: '', tone: 'info' }
+  }
+}
+
+// 把本轮实时区（用户消息 + 过程事件 + assistant 增量）合并进永久时间轴并清空
+function commitLive() {
+  if (liveUser.value) timeline.value.push({ kind: 'message', role: 'user', content: liveUser.value })
+  for (const ev of liveEvents.value) timeline.value.push({ kind: 'event', event: ev })
+  if (liveAssistant.value) {
+    timeline.value.push({ kind: 'message', role: 'assistant', content: liveAssistant.value })
+  }
+  liveUser.value = ''
+  liveEvents.value = []
+  liveAssistant.value = ''
 }
 
 async function send() {
@@ -90,13 +188,14 @@ async function send() {
 
   const userText = input.value.trim()
   input.value = ''
-  messages.value.push({ role: 'user', content: userText })
-  const assistant: ChatMessage = { role: 'assistant', content: '' }
-  messages.value.push(assistant)
+  liveUser.value = userText
+  liveAssistant.value = ''
+  liveEvents.value = []
   await scrollBottom()
 
   streaming.value = true
   abortCtrl.value = new AbortController()
+  const gen = ++streamGen // 本流的代次：切会话/新对话后作废旧流回调
 
   await chatApi.streamChat(
     {
@@ -108,41 +207,59 @@ async function send() {
     {
       signal: abortCtrl.value.signal,
       onMessage: (data) => {
+        if (gen !== streamGen) return // 已切会话：丢弃旧流增量
         let obj: unknown
         try {
           obj = JSON.parse(data)
         } catch {
           // 非 JSON 帧，直接当文本增量兜底
-          assistant.content += data
+          liveAssistant.value += data
           scrollBottom()
           return
         }
         const o = obj as {
           choices?: { delta?: { content?: string } }[]
           type?: string
+          event?: TraceEvent
           payload?: { request_id?: string }
+        }
+        if (o.type === 'trace_event' && o.event) {
+          // 实时过程帧：与 trace 落盘事件同构，过滤轮次边界后入时间轴
+          if (o.event.type !== 'chat_start' && o.event.type !== 'chat_end') {
+            liveEvents.value.push(o.event)
+            scrollBottom()
+          }
+          return
         }
         if (o.type === '__interrupt__') {
           const rid = o.payload?.request_id
-          assistant.content += `\n\n⏸️ 触发工具审批（request_id=${rid ?? '?'}），请到「工具审批」处理后继续。`
+          liveAssistant.value += `\n\n⏸️ 触发工具审批（request_id=${rid ?? '?'}），请到「工具审批」处理后刷新本会话查看结果。`
           toast.info('该操作需要人工审批')
           scrollBottom()
           return
         }
         const delta = o.choices?.[0]?.delta?.content
         if (delta) {
-          assistant.content += delta
+          liveAssistant.value += delta
           scrollBottom()
         }
       },
       onError: (err) => {
-        assistant.content += `\n\n[出错] ${err instanceof Error ? err.message : String(err)}`
+        if (gen !== streamGen) return // 已切会话：作废旧流（含 abort 后的 AbortError）
+        liveAssistant.value += `\n\n[出错] ${err instanceof Error ? err.message : String(err)}`
+        commitLive()
+        streaming.value = false
+        abortCtrl.value = null
         toast.error('对话出错')
+        scrollBottom()
       },
       onDone: async () => {
+        if (gen !== streamGen) return // 已切会话：旧流结束不再提交/刷新
+        commitLive()
         streaming.value = false
         abortCtrl.value = null
         await loadConversations()
+        await scrollBottom()
       },
     },
   )
@@ -150,8 +267,9 @@ async function send() {
 
 function stop() {
   abortCtrl.value?.abort()
-  streaming.value = false
   abortCtrl.value = null
+  commitLive() // 停止时把已产生的部分内容并入时间轴，避免丢失
+  streaming.value = false
 }
 
 onMounted(async () => {
@@ -193,19 +311,48 @@ onMounted(async () => {
       </div>
 
       <div ref="bodyRef" class="chat-body">
-        <div v-if="!messages.length" class="chat-welcome">
+        <div v-if="!timeline.length && !liveUser && !streaming" class="chat-welcome">
           <div class="welcome-logo">◢</div>
           <div class="welcome-title">与你的 Agent 对话</div>
-          <div class="welcome-sub">选择一个 Agent，输入消息开始。支持 Markdown 渲染与流式输出。</div>
+          <div class="welcome-sub">选择一个 Agent，输入消息开始。支持 Markdown 渲染、流式输出与过程时间轴。</div>
         </div>
 
-        <div v-for="(m, i) in messages" :key="i" class="msg" :class="`msg-${m.role}`">
-          <div class="msg-role">
-            {{ m.role === 'user' ? '我' : m.role === 'assistant' ? 'Agent' : m.role }}
+        <!-- 统一时间轴：消息气泡 + 过程事件卡 -->
+        <template v-for="(entry, i) in timeline" :key="'t' + i">
+          <div v-if="entry.kind === 'message'" class="msg" :class="`msg-${entry.role}`">
+            <div class="msg-role">
+              {{ entry.role === 'user' ? '我' : entry.role === 'assistant' ? 'Agent' : entry.role }}
+            </div>
+            <div v-if="entry.role === 'assistant'" class="msg-content md" v-html="md(entry.content)"></div>
+            <div v-else class="msg-content">{{ entry.content }}</div>
           </div>
-          <div v-if="m.role === 'assistant'" class="msg-content md" v-html="md(m.content)"></div>
-          <div v-else class="msg-content">{{ m.content || (streaming && i === messages.length - 1 ? '▍' : '') }}</div>
-        </div>
+          <div v-else class="proc-card" :class="`proc-${eventMeta(entry.event).tone}`">
+            <div class="proc-icon">{{ eventMeta(entry.event).icon }}</div>
+            <div class="proc-body">
+              <div class="proc-title">{{ eventMeta(entry.event).title }}</div>
+              <div v-if="eventMeta(entry.event).subtitle" class="proc-sub">{{ eventMeta(entry.event).subtitle }}</div>
+            </div>
+          </div>
+        </template>
+
+        <!-- 本轮实时区：用户消息 + 过程事件 + 流式 assistant -->
+        <template v-if="liveUser || liveEvents.length || liveAssistant || streaming">
+          <div class="msg msg-user">
+            <div class="msg-role">我</div>
+            <div class="msg-content">{{ liveUser }}</div>
+          </div>
+          <div v-for="(ev, i) in liveEvents" :key="'le' + i" class="proc-card" :class="`proc-${eventMeta(ev).tone}`">
+            <div class="proc-icon">{{ eventMeta(ev).icon }}</div>
+            <div class="proc-body">
+              <div class="proc-title">{{ eventMeta(ev).title }}</div>
+              <div v-if="eventMeta(ev).subtitle" class="proc-sub">{{ eventMeta(ev).subtitle }}</div>
+            </div>
+          </div>
+          <div v-if="liveAssistant || streaming" class="msg msg-assistant">
+            <div class="msg-role">Agent</div>
+            <div class="msg-content md" v-html="md(liveAssistant + (streaming ? ' ▍' : ''))"></div>
+          </div>
+        </template>
       </div>
 
       <div class="chat-input">
@@ -383,6 +530,69 @@ onMounted(async () => {
   font-size: 12.5px;
   background: var(--bg-deep);
   color: var(--text-secondary);
+}
+
+/* 过程事件卡（工具/子任务/审批） */
+.proc-card {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  max-width: 860px;
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: rgba(10, 14, 22, 0.5);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--text-muted);
+}
+.proc-icon {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  border-radius: 6px;
+  background: var(--bg-raised);
+  margin-top: 1px;
+}
+.proc-body {
+  min-width: 0;
+}
+.proc-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.proc-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.proc-info {
+  border-left-color: var(--info);
+}
+.proc-info .proc-icon {
+  color: var(--info);
+}
+.proc-success {
+  border-left-color: var(--success);
+}
+.proc-success .proc-icon {
+  color: var(--success);
+}
+.proc-warning {
+  border-left-color: var(--warning);
+}
+.proc-warning .proc-icon {
+  color: var(--warning);
 }
 
 /* Markdown 样式 */

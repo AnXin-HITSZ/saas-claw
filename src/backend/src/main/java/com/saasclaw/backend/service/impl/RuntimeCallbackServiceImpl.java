@@ -11,6 +11,8 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 
@@ -34,14 +36,28 @@ public class RuntimeCallbackServiceImpl implements RuntimeCallbackService {
 
     @Override
     public void notifyApproval(Long clawId, ApprovalResultVO result) {
+        Map<String, Object> decision = new LinkedHashMap<>();
+        decision.put("decision", toDecision(result.getAction()));
+        decision.put("reason", result.getCustomMessage() == null ? "" : result.getCustomMessage());
+        notify(clawId, result.getRequestId(), decision);
+    }
+
+    @Override
+    public void notifyBatchApproval(Long clawId, String requestId, Map<String, Object> result) {
+        notify(clawId, requestId, result);
+    }
+
+    private void notify(Long clawId, String requestId, Object result) {
         String url = urlTemplate.replace("{id}", String.valueOf(clawId)) + "/approvals/callback";
         RestClient client = restClientBuilder.build();
         try {
-            // fire-and-forget：execute 满池时同步抛 RejectedExecutionException，在此兜底，不阻塞请求线程
-            approvalCallbackExecutor.execute(() -> callWithRetry(client, url, new CallbackBody(result)));
+            // fire-and-forget：线程池已配 CallerRunsPolicy，满池时不再丢回调，而是在本线程
+            // （approve 请求线程）同步执行 callWithRetry——保证回调必达，runtime 主图不会因
+            // 回调丢失而永久挂起（修复：放弃回调会让用户已批准的对话无响应）。
+            approvalCallbackExecutor.execute(() -> callWithRetry(client, url, new CallbackBody(requestId, result)));
         } catch (RejectedExecutionException e) {
-            // 满池：本回调尽力而为，留痕放弃（审批记录仍在 MySQL，用户可查可重发）
-            log.error("审批回调线程池已满，放弃回调 requestId={} url={}", result.getRequestId(), url, e);
+            // 理论不可达（CallerRunsPolicy 不拒绝），仅防御性兜底：显式留痕，不静默放弃
+            log.error("审批回调提交异常 requestId={} url={}", requestId, url, e);
         }
     }
 
@@ -70,33 +86,21 @@ public class RuntimeCallbackServiceImpl implements RuntimeCallbackService {
         }
     }
 
-    /** 回调 body（runtime 契约）：字段与 ApprovalCallbackBody 对齐，全局 SNAKE_CASE 自动转 snake_case */
+    /** action 1=允许 → approve，2/3=拒绝 → reject（3 带自定义消息） */
+    private String toDecision(Integer action) {
+        return action != null && action == 1 ? "approve" : "reject";
+    }
+
+    /** 回调 body（runtime 契约）：字段与 ApprovalCallbackBody 对齐，全局 SNAKE_CASE 自动转 snake_case。
+     *  result 用 Object：单条审批放 {decision, reason} Map，批量审批放 {decision, reason, decisions?} Map。 */
     @Data
     private static class CallbackBody {
         private String requestId;
-        private CallbackResult result;
+        private Object result;
 
-        CallbackBody(ApprovalResultVO vo) {
-            this.requestId = vo.getRequestId();
-            this.result = new CallbackResult(vo);
-        }
-    }
-
-    /** 决策 + 理由：action 1=允许、2/3=拒绝（3 带用户自定义消息） */
-    @Data
-    private static class CallbackResult {
-        private String decision;
-        private String reason;
-
-        CallbackResult(ApprovalResultVO vo) {
-            String decision;
-            switch (vo.getAction()) {
-                case 1 -> decision = "approve";
-                case 2, 3 -> decision = "reject";
-                default -> throw new IllegalArgumentException("未识别 action: " + vo.getAction());
-            }
-            this.decision = decision;
-            this.reason = vo.getCustomMessage() == null ? "" : vo.getCustomMessage();
+        CallbackBody(String requestId, Object result) {
+            this.requestId = requestId;
+            this.result = result;
         }
     }
 }

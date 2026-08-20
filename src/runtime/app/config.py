@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     oss_bucket: str = ""
 
     # ---- backend 审批通道（程序通道 API Key，同 authorization 表那把 sk-xxx）----
-    backend_base_url: str = "http://backend:8080"  # 集群内 Service DNS
+    backend_base_url: str = "http://backend:8080/api"  # 集群内 Service DNS（含 context-path /api）
     backend_api_key: str = ""  # Bearer sk-xxx
 
     # ---- 本 Pod 身份（K8s Deployment 注入）----

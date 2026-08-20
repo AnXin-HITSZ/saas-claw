@@ -240,6 +240,25 @@ CREATE TABLE tool_approval (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='工具审批留痕表';
 ```
 
+## tool_approval_batch 表（批量敏感工具审批留痕）
+
+```sql
+CREATE TABLE tool_approval_batch (
+    id            BIGINT       PRIMARY KEY AUTO_INCREMENT,
+    request_id    VARCHAR(64)  NOT NULL,       -- 批量审批请求 ID（approval:batch:{spawn_id}）
+    user_id       BIGINT       NOT NULL,       -- 需要确认的用户
+    claw_id       BIGINT       DEFAULT NULL,   -- 归属 Claw
+    agent_id      BIGINT       NOT NULL,       -- 发起 spawn 的父 Agent
+    sub_requests  TEXT         NOT NULL,       -- 子请求明细 JSON 数组
+    action        TINYINT      DEFAULT NULL,   -- 整体决策 1=允许 2=拒绝 3=自定义消息
+    decision_json TEXT         DEFAULT NULL,   -- 逐子请求决策 JSON（null=按整体决策）
+    status        TINYINT      DEFAULT 0,      -- 0=待审批 1=已处理
+    created_at    DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    handled_at    DATETIME     DEFAULT NULL,   -- 处理时间（留痕审计用）
+    UNIQUE KEY uk_batch_request (request_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='批量工具审批留痕表';
+```
+
 ## agent_installation 表（Agent 安装记录）
 
 ```sql

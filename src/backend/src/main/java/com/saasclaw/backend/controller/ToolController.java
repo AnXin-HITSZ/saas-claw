@@ -2,13 +2,16 @@ package com.saasclaw.backend.controller;
 
 import com.saasclaw.backend.common.Result;
 import com.saasclaw.backend.config.RequireAdmin;
+import com.saasclaw.backend.dto.CreateApprovalBatchRequest;
 import com.saasclaw.backend.dto.CreateApprovalRequest;
 import com.saasclaw.backend.dto.CreateToolRequest;
 import com.saasclaw.backend.dto.UpdateToolRequest;
 import com.saasclaw.backend.entity.Tool;
 import com.saasclaw.backend.service.ApprovalEventBus;
+import com.saasclaw.backend.service.ToolApprovalBatchService;
 import com.saasclaw.backend.service.ToolApprovalService;
 import com.saasclaw.backend.service.ToolService;
+import com.saasclaw.backend.vo.ApprovalBatchVO;
 import com.saasclaw.backend.vo.ApprovalRequestVO;
 import com.saasclaw.backend.vo.ApprovalResultVO;
 import jakarta.validation.Valid;
@@ -26,6 +29,7 @@ public class ToolController {
 
     private final ToolService toolService;
     private final ToolApprovalService toolApprovalService;
+    private final ToolApprovalBatchService toolApprovalBatchService;
     private final ApprovalEventBus approvalEventBus;
 
     /** 启用工具清单（登录用户可看，AuthInterceptor 兜底 JWT 鉴权） */
@@ -71,6 +75,14 @@ public class ToolController {
             @RequestAttribute("userId") Long userId,
             @Valid @RequestBody CreateApprovalRequest request) {
         return Result.ok(toolApprovalService.create(userId, request));
+    }
+
+    /** 创建批量审批请求（spawn_subagent 聚合子任务敏感操作，requestId 幂等） */
+    @PostMapping("/approval-batches")
+    public Result<ApprovalBatchVO> createApprovalBatch(
+            @RequestAttribute("userId") Long userId,
+            @Valid @RequestBody CreateApprovalBatchRequest request) {
+        return Result.ok(toolApprovalBatchService.create(userId, request));
     }
 
     /** 按需查询审批结果（runtime 断线/重连兜底） */

@@ -309,6 +309,37 @@ export interface ApprovalRequestVO {
   handled_at: string | null
 }
 
+// ---------------- 批量审批（spawn_subagent 聚合，一张卡覆盖多路子请求）----------------
+export interface ApprovalBatchSubRequestVO {
+  request_id: string
+  tool_id: number | null
+  tool_name: string | null
+  input_summary: string | null
+}
+export interface ApprovalBatchVO {
+  batch_id: number
+  request_id: string
+  agent_id: number
+  agent_name: string | null
+  claw_id: number
+  sub_requests: ApprovalBatchSubRequestVO[]
+  status: number
+  action: number | null
+  custom_message: string | null
+  created_at: string
+  handled_at: string | null
+}
+/** 逐子请求决策（decisions 映射的值）：缺省按整体决策 */
+export interface ApprovalBatchDecision {
+  action: number
+  custom_message?: string
+}
+export interface HandleApprovalBatchRequest {
+  action: number
+  custom_message?: string
+  decisions?: Record<string, ApprovalBatchDecision>
+}
+
 // ---------------- 推理 / 会话（/v1/**，runtime 原始 JSON）----------------
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system' | 'tool'
@@ -333,8 +364,52 @@ export interface ConversationMessagesVO {
   conversation_id: string
   messages: ChatMessage[]
 }
+// ---------------- 追踪 / 时间轴（/v1/conversations/{id}/trace）----------------
+export type TraceEventType =
+  | 'chat_start'
+  | 'chat_end'
+  | 'tool_start'
+  | 'tool_end'
+  | 'subagent_start'
+  | 'subagent_end'
+  | 'approval_pending'
+  | 'approval_resolved'
+
+/** 单条追踪事件（trace 落盘与 SSE 过程帧共用同一结构） */
+export interface TraceEvent {
+  event_id: string
+  type: TraceEventType | string
+  claw_id: number
+  agent_id: number | null
+  user_id: number | null
+  conversation_id: string
+  span_id: string
+  parent_id: string | null
+  timestamp_ms: number
+  data: Record<string, unknown>
+}
+
+/** 时间轴项：消息 或 事件（/trace 的 items 已按时间合并两种） */
+export interface TraceMessageItem {
+  kind: 'message'
+  role: string
+  content: string
+  timestamp_ms: number | null
+}
+export interface TraceEventItem extends TraceEvent {
+  kind: 'event'
+}
+export type TraceItem = TraceMessageItem | TraceEventItem
+
+/** span 树节点：容器节点聚合该 span 全部事件 + 子节点 */
+export interface TraceSpanNode extends TraceEvent {
+  events: TraceEvent[]
+  children: TraceSpanNode[]
+}
+
 export interface ConversationTraceVO {
   conversation_id: string
-  events: unknown[]
-  tree: unknown
+  events: TraceEvent[]
+  items: TraceItem[]
+  tree: TraceSpanNode[]
 }

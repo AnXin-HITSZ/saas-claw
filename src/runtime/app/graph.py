@@ -87,11 +87,19 @@ def _llm_node(model_with_tools: Runnable) -> Callable[[ClawState], dict[str, lis
     return _fn
 
 
+# 会 interrupt 的工具必须串行（同线程不支持并发 interrupt）：敏感工具经 approval_gate、
+# spawn_subagent 经 batch barrier 都会在节点内 interrupt。混入 asyncio.gather 只会向上传播
+# 第一个 GraphInterrupt、静默吞掉兄弟中断——第二个 spawn 的 batch 已 POST 进 backend 却从未
+# 注册/露出，审批决策串线或永久挂起。
+_INTERRUPTING_TOOLS = {"spawn_subagent"}
+
+
 async def _tool_node(state: ClawState, config: RunnableConfig) -> dict:
     """工具节点：执行上一条 AI 消息的全部工具调用。
 
-    - 非敏感工具 asyncio.gather 并发（call_agent 并行派发 subAgent）；
-    - 敏感工具逐个 await（审批 interrupt 需保证顺序，同线程不支持并发 interrupt）。
+    - 非敏感且不会 interrupt 的工具 asyncio.gather 并发；
+    - 会 interrupt 的工具（敏感工具 + spawn_subagent）逐个 await：审批 interrupt 需保证顺序，
+      同线程不支持并发 interrupt。
     """
     from .tools.registry import execute_tool_call
 
@@ -100,16 +108,20 @@ async def _tool_node(state: ClawState, config: RunnableConfig) -> dict:
     calls = last_message.tool_calls
 
     spec_by_name = {s["name"]: s for s in state.get("tool_specs", [])}
-    sensitive = [c for c in calls if spec_by_name.get(c["name"], {}).get("is_sensitive")]
-    sensitive_ids = {c["id"] for c in sensitive}
-    nonsensitive = [c for c in calls if c["id"] not in sensitive_ids]
+    serial = [
+        c for c in calls
+        if spec_by_name.get(c["name"], {}).get("is_sensitive") or c["name"] in _INTERRUPTING_TOOLS
+    ]
+    serial_ids = {c["id"] for c in serial}
+    parallel = [c for c in calls if c["id"] not in serial_ids]
 
     results: dict[str, str] = {}
-    for c in sensitive:  # 串行：审批 interrupt 顺序唯一
-        results[c["id"]] = await execute_tool_call(c, state, config)
-    if nonsensitive:  # 并行：多个 call_agent 一次派发
-        batch = await asyncio.gather(*(execute_tool_call(c, state, config) for c in nonsensitive))
-        results.update(zip((c["id"] for c in nonsensitive), batch))
+    for c in serial:  # 串行：审批 interrupt 顺序唯一
+        results[c["id"]], _ = await execute_tool_call(c, state, config)
+    if parallel:  # 并行：多个非敏感、非 interrupt 工具一次派发
+        batch = await asyncio.gather(*(execute_tool_call(c, state, config) for c in parallel))
+        for c, (res, _executed) in zip(parallel, batch):
+            results[c["id"]] = res
 
     return {
         "messages": [
@@ -161,7 +173,13 @@ def _assemble_agent(agent: Agent) -> dict:
 
 
 def prepare_node(state: ClawState) -> dict:
-    """首节点：请求带 agent_id/alias → 解析并组装；否则交 router。"""
+    """首节点：请求带 agent_id/alias → 解析并组装；否则交 router。
+
+    归属校验（claw-boundary）：get_agent_by_id 只按 id+status 查、不校验归属，必须补
+    claw_id/user_id 约束，防止跨 Claw/跨用户越权驱动他人 Agent（IDOR：泄露其 persona/
+    system_prompt/model api_key/文件并盗用额度）。与 call_agent 的边界校验对齐。
+    """
+    from .config import settings
     from .db import get_agent_by_alias, get_agent_by_id
 
     if state.get("agent_id"):
@@ -174,14 +192,22 @@ def prepare_node(state: ClawState) -> dict:
         return {}
     if agent is None:
         return {}
+    if agent.claw_id != settings.claw_id or agent.user_id != state.get("user_id"):
+        return {}  # 越权/跨 Claw：不组装，executor 兜底返回「未能确定要执行的 Agent」
     return _assemble_agent(agent)
 
 
-def executor_node(state: ClawState, config: RunnableConfig) -> dict:
-    """executor：解析 Agent，取/建子图并 invoke，只回传最终 AI 回复（工具中间消息不入历史）。
+async def executor_node(state: ClawState, config: RunnableConfig) -> dict:
+    """executor：解析 Agent，取/建子图并用 astream 执行，只回传最终 AI 回复（工具中间消息不入历史）。
 
-    config 必须传给子图 invoke：审批 interrupt 的挂起/恢复依赖同一个 thread_id。
+    config 传给子图：审批 interrupt 的挂起/恢复依赖同一个 thread_id。
+    - 用 astream(stream_mode=["updates","custom"]) 而非 invoke：让子图内 emit_event 的 live 过程帧
+      （工具/子agent/审批）经 custom 通道透传到主图 custom 流，实现实时过程卡。
+    - 子图 __interrupt__ 在 astream 里被吞成帧（不向上抛），需检测后重新 interrupt() 把挂起透传给主图。
     """
+    from langgraph.types import interrupt
+
+    from .config import settings
     from .db import get_agent_by_id
 
     agent_id = state.get("agent_id")
@@ -193,7 +219,31 @@ def executor_node(state: ClawState, config: RunnableConfig) -> dict:
     agent = get_agent_by_id(agent_id)
     if agent is None:
         return {"messages": [AIMessage(content="Agent 不存在或已停用。")]}
+    if agent.claw_id != settings.claw_id or agent.user_id != state.get("user_id"):
+        return {"messages": [AIMessage(content="Agent 不属于当前 Claw 或当前用户，已拒绝执行。")]}
 
     subgraph = get_agent_subgraph(agent, model_config, tool_specs)
-    final_state = subgraph.invoke(dict(state), config=config)
-    return {"messages": [final_state["messages"][-1]]}
+    async for mode, chunk in subgraph.astream(dict(state), config=config, stream_mode=["updates", "custom"]):
+        if mode == "custom":
+            _forward_main_live(chunk)
+        elif mode == "updates" and "__interrupt__" in chunk:
+            for itr in chunk["__interrupt__"]:
+                interrupt(itr.value)  # 子图挂起 → 主图层面重新挂起（透传同一 payload/request_id）
+
+    final_state = await subgraph.aget_state(config)
+    messages = final_state.values.get("messages", []) if final_state.values else []
+    if not messages:
+        return {"messages": [AIMessage(content="（子 Agent 未产出消息）")]}
+    return {"messages": [messages[-1]]}
+
+
+def _forward_main_live(chunk) -> None:
+    """把子图的 custom 过程帧透传到主图 custom 流（live 实时过程卡）。"""
+    try:
+        from langgraph.config import get_stream_writer
+
+        writer = get_stream_writer()
+        if writer is not None:
+            writer(chunk)
+    except Exception:
+        pass  # 脱离流上下文时 no-op；落盘仍由 emit_event 保证
