@@ -35,7 +35,13 @@ public class ConcurrencyFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         }
 
-        String modelName = exchange.getAttributes().get("modelName").toString();
+        // modelName 仅由 BodyRewriteFilter(-90) 对 POST /v1 注入；缺失 = 非推理请求（GET /v1/conversations
+        // 等会话管理接口），并发控制不适用，直接放行，否则 get("modelName").toString() 会 NPE 500。
+        Object modelAttr = exchange.getAttributes().get("modelName");
+        if (modelAttr == null) {
+            return chain.filter(exchange);
+        }
+        String modelName = modelAttr.toString();
         String requestId = exchange.getAttributes().get("requestId").toString();
 
         String productCode = (String) exchange.getAttributes().get("productCode");

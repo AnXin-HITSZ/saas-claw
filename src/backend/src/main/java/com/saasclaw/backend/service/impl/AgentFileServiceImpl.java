@@ -1,5 +1,6 @@
 package com.saasclaw.backend.service.impl;
 
+import com.aliyun.oss.OSSException;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.saasclaw.backend.common.BizException;
 import com.saasclaw.backend.entity.Agent;
@@ -14,12 +15,20 @@ import org.springframework.stereotype.Service;
 import com.saasclaw.backend.util.HashUtil;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
 public class AgentFileServiceImpl implements AgentFileService {
+
+    /** 人格文件白名单：readContent / writeContent（前端查看编辑）仅允许这三份 */
+    private static final Set<String> PERSONA_FILES = Set.of("SOUL.md", "IDENTITY.md", "AGENTS.md");
+    /** 全量写入单次上限：16KB（与 runtime update_persona 单次限制对齐） */
+    private static final int CONTENT_LIMIT = 16 * 1024;
 
     private final AgentFileMapper agentFileMapper;
     private final AgentMapper agentMapper;
@@ -32,21 +41,64 @@ public class AgentFileServiceImpl implements AgentFileService {
         if (file == null || file.isEmpty()) {
             throw new BizException(400, "文件内容为空");
         }
-
-        String hash;
-        String url;
+        byte[] bytes;
         try {
-            hash = HashUtil.sha256Hex(file.getBytes());
-            url = ossService.upload("agent/" + agentId + "/" + path,
-                    file.getInputStream(), file.getSize(), contentType(file, path));
+            bytes = file.getBytes();
         } catch (IOException e) {
             throw new BizException(500, "读取文件失败");
         }
+        return persistBytes(agentId, path, bytes, contentType(file, path));
+    }
 
-        AgentFile existing = agentFileMapper.selectOne(
-                new LambdaQueryWrapper<AgentFile>()
-                        .eq(AgentFile::getAgentId, agentId)
-                        .eq(AgentFile::getFileName, path));
+    @Override
+    public String readContent(Long userId, Long agentId, String fileName) {
+        getOwnedAgent(userId, agentId);
+        if (!PERSONA_FILES.contains(fileName)) {
+            throw new BizException(400, "仅支持人格文件 " + PERSONA_FILES);
+        }
+        AgentFile row = selectFile(agentId, fileName);
+        if (row == null) {
+            throw new BizException(404, "人格文件不存在，可先上传创建");
+        }
+        try {
+            return ossService.read(ossService.keyFromUrl(row.getFileUrl()));
+        } catch (OSSException e) {
+            // 仅 NoSuchKey（DB 行在但对象被手动清理）按「不存在」处理，与前端「404 = 视为空文件
+            // 可创建」约定对齐；鉴权/网络类 OSS 服务错误仍向上抛，落到兜底 500 如实提示。
+            if ("NoSuchKey".equals(e.getErrorCode())) {
+                throw new BizException(404, "人格文件不存在，可先上传创建");
+            }
+            throw e;
+        }
+    }
+
+    @Override
+    public AgentFileVO writeContent(Long userId, Long agentId, String fileName, String content) {
+        getOwnedAgent(userId, agentId);
+        if (!PERSONA_FILES.contains(fileName)) {
+            throw new BizException(400, "仅支持人格文件 " + PERSONA_FILES);
+        }
+        if (content == null) {
+            throw new BizException(400, "内容不能为空");
+        }
+        byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
+        if (bytes.length > CONTENT_LIMIT) {
+            throw new BizException(400, "内容超长（上限 " + CONTENT_LIMIT / 1024 + "KB）");
+        }
+        return persistBytes(agentId, fileName, bytes, "text/markdown; charset=utf-8");
+    }
+
+    /** 全量写入落库：重算 hash/size → 上传 OSS → 按 (agentId, fileName) upsert agent_file 行 */
+    private AgentFileVO persistBytes(Long agentId, String path, byte[] bytes, String contentType) {
+        String hash = HashUtil.sha256Hex(bytes);
+        String url;
+        try {
+            url = ossService.upload("agent/" + agentId + "/" + path,
+                    new ByteArrayInputStream(bytes), bytes.length, contentType);
+        } catch (RuntimeException e) {
+            throw new BizException(500, "写入文件失败");
+        }
+        AgentFile existing = selectFile(agentId, path);
         AgentFile saved;
         if (existing == null) {
             AgentFile f = new AgentFile();
@@ -54,19 +106,26 @@ public class AgentFileServiceImpl implements AgentFileService {
             f.setFileName(path);
             f.setFileUrl(url);
             f.setFileType(fileTypeOf(path));
-            f.setFileSize(file.getSize());
+            f.setFileSize((long) bytes.length);
             f.setFileHash(hash);
             agentFileMapper.insert(f);
             saved = f;
         } else {
             existing.setFileUrl(url);
             existing.setFileType(fileTypeOf(path));
-            existing.setFileSize(file.getSize());
+            existing.setFileSize((long) bytes.length);
             existing.setFileHash(hash);
             agentFileMapper.updateById(existing);
             saved = existing;
         }
         return toVO(saved);
+    }
+
+    private AgentFile selectFile(Long agentId, String fileName) {
+        return agentFileMapper.selectOne(
+                new LambdaQueryWrapper<AgentFile>()
+                        .eq(AgentFile::getAgentId, agentId)
+                        .eq(AgentFile::getFileName, fileName));
     }
 
     @Override

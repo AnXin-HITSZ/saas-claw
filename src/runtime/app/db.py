@@ -1,4 +1,4 @@
-"""MySQL 只读访问：runtime 读 agent/skill/tool 配置，不写库（审批走 HTTP）。"""
+"""MySQL 访问：runtime 读 agent/skill/tool 配置；仅 agent_file 行由人格直写工具 upsert，其余只读。"""
 from sqlalchemy import BigInteger, Double, Integer, String, Text, create_engine, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
@@ -31,6 +31,7 @@ class AgentFile(Base):
     agent_id: Mapped[int] = mapped_column(BigInteger)
     file_name: Mapped[str] = mapped_column(String(128))
     file_url: Mapped[str] = mapped_column(String(512))
+    file_type: Mapped[str | None] = mapped_column(String(32))
     file_size: Mapped[int] = mapped_column(BigInteger, default=0)
     file_hash: Mapped[str | None] = mapped_column(String(64))
 
@@ -119,6 +120,36 @@ def get_agents_by_claw(claw_id: int) -> list[Agent]:
 def get_agent_files(agent_id: int) -> list[AgentFile]:
     with SessionLocal() as s:
         return list(s.scalars(select(AgentFile).where(AgentFile.agent_id == agent_id)))
+
+
+def upsert_agent_file(
+    agent_id: int,
+    file_name: str,
+    file_url: str,
+    file_size: int,
+    file_hash: str,
+    file_type: str | None = None,
+) -> None:
+    """人格直写后同步 agent_file 行（runtime 唯一写库路径，其余查询保持只读）。
+
+    存在 (agent_id, file_name) 行则更新 url/type/size/hash，否则插入新行。
+    必须更新 file_hash：runtime 的 _persona_cache 按 hash 比对，不更新则人格修改永不生效。
+    """
+    with SessionLocal() as s:
+        row = s.scalars(select(AgentFile).where(
+            AgentFile.agent_id == agent_id, AgentFile.file_name == file_name
+        )).first()
+        if row is None:
+            s.add(AgentFile(
+                agent_id=agent_id, file_name=file_name, file_url=file_url,
+                file_type=file_type, file_size=file_size, file_hash=file_hash,
+            ))
+        else:
+            row.file_url = file_url
+            row.file_type = file_type
+            row.file_size = file_size
+            row.file_hash = file_hash
+        s.commit()
 
 
 def get_model_config(name: str) -> ModelConfig | None:

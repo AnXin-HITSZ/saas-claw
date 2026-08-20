@@ -12,7 +12,10 @@
 """
 import asyncio
 import json
+import logging
 from typing import Callable
+
+logger = logging.getLogger(__name__)
 
 from langchain_core.messages import SystemMessage, ToolMessage, BaseMessage, AIMessage
 from langchain_core.runnables import Runnable, RunnableConfig
@@ -72,7 +75,16 @@ def get_agent_subgraph(agent: Agent, model_config: dict, tool_specs: list[dict])
         build = _SUBGRAPH_TEMPLATES.get(template)
         if build is None:
             raise ValueError(f"未知子图模板: {template}")
-        _agent_subgraphs[agent.id] = (template, sig, build(model_config, tool_specs))
+        try:
+            compiled = build(model_config, tool_specs)
+        except Exception as exc:
+            # 首次编译失败（model_config 缺键/凭证为空/工具 JSON Schema 不合法）不裸抛晦涩异常：
+            # 转清晰 ValueError，经 executor/工具链到顶层 gen() 转 SSE error 或工具失败文本。
+            # 编译失败不写缓存——下个请求仍会重试，不因一次瞬态错误永久毒化。
+            raise ValueError(
+                f"Agent 子图编译失败（请检查 {agent.base_model} 的模型配置 endpoint/api_key/model_name 是否合法）: {exc}"
+            ) from exc
+        _agent_subgraphs[agent.id] = (template, sig, compiled)
     return _agent_subgraphs[agent.id][2]
 
 
@@ -153,14 +165,26 @@ def build_claw_graph():
 def _assemble_agent(agent: Agent) -> dict:
     """Agent 实体 → State 增量：人格 + 模型参数 + 工具清单。"""
     from .db import get_agent_files, get_model_config, get_tools
-    from .persona import build_system_message
+    from .persona import PersonaStatus, build_persona_directive, build_system_message
     from .tools.registry import build_tool_specs
 
     agent_files = get_agent_files(agent.id)
     cfg = get_model_config(agent.base_model)
+    if cfg is None:
+        # 模型配置缺失（行被删/停用 status=0）时抛清晰错误而非 AttributeError；主图 gen() 会
+        # 捕获并转成 SSE error 事件，避免 ASGI 裸异常导致连接被硬断（网关 PrematureClose）。
+        raise ValueError(f"Agent 的模型配置不存在或已停用: {agent.base_model}，请在模型配置管理补录")
+
+    # 人格组装 + 初始化状态感知：非 CONFIGURED 时把状态指令追加进 persona 串。
+    # 每请求重算 → 人格配置好（runtime 直写 / 前端上传 / 配 system_prompt）后下一请求自动消失。
+    persona, status = build_system_message(agent, agent_files)
+    if status != PersonaStatus.CONFIGURED:
+        directive = build_persona_directive(agent, status)
+        persona = f"{persona}\n\n{directive}" if persona else directive
+
     return {
         "agent_id": agent.id,
-        "persona": build_system_message(agent, agent_files),
+        "persona": persona,
         "model_config": {
             "model_name": cfg.model_name,
             "endpoint": cfg.endpoint,
@@ -223,14 +247,35 @@ async def executor_node(state: ClawState, config: RunnableConfig) -> dict:
         return {"messages": [AIMessage(content="Agent 不属于当前 Claw 或当前用户，已拒绝执行。")]}
 
     subgraph = get_agent_subgraph(agent, model_config, tool_specs)
+    last_ai: AIMessage | None = None  # aget_state Redis 读失败时兜底返回，避免已产出内容丢失
     async for mode, chunk in subgraph.astream(dict(state), config=config, stream_mode=["updates", "custom"]):
         if mode == "custom":
             _forward_main_live(chunk)
-        elif mode == "updates" and "__interrupt__" in chunk:
-            for itr in chunk["__interrupt__"]:
-                interrupt(itr.value)  # 子图挂起 → 主图层面重新挂起（透传同一 payload/request_id）
+        elif mode == "updates":
+            if "__interrupt__" in chunk:
+                for itr in chunk["__interrupt__"]:
+                    interrupt(itr.value)  # 子图挂起 → 主图层面重新挂起（透传同一 payload/request_id）
+            else:
+                # 顺带缓存最后一轮无工具调用的 AI 消息：子图最终状态读 Redis 失败时兜底返回。
+                # （触发 interrupt 的那条带 tool_calls 的 AI 消息不视为最终回复，跳过。）
+                for node_update in chunk.values():
+                    msgs = node_update.get("messages") if isinstance(node_update, dict) else None
+                    if not msgs:
+                        continue
+                    for m in msgs:
+                        if isinstance(m, AIMessage) and not m.tool_calls:
+                            last_ai = m
 
-    final_state = await subgraph.aget_state(config)
+    try:
+        final_state = await subgraph.aget_state(config)
+    except Exception as exc:
+        # aget_state 走 Redis GET（checkpointer.aget_tuple），读失败不击穿本轮：兜底返回 astream
+        # 里缓存的最后一条 AI 消息；连缓存都没有时给可读兜底文案，保证流正常收尾（不 PrematureClose）。
+        logger.warning("读取子图最终状态失败 agent_id=%s: %s", agent_id, exc, exc_info=True)
+        if last_ai is not None:
+            return {"messages": [last_ai]}
+        return {"messages": [AIMessage(content="（Agent 执行完成，但最终状态读取失败，结果可能不完整）")]}
+
     messages = final_state.values.get("messages", []) if final_state.values else []
     if not messages:
         return {"messages": [AIMessage(content="（子 Agent 未产出消息）")]}

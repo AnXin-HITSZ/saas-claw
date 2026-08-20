@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/agents/{agentId}/files")
@@ -37,5 +38,23 @@ public class AgentFileController {
                                @PathVariable Long fileId) {
         agentFileService.delete(userId, agentId, fileId);
         return Result.ok();
+    }
+
+    /** 人格文件全量读取：返回文件全文；不存在抛 404（前端据此视为空文件可创建） */
+    @GetMapping("/{fileName}")
+    public Result<String> readContent(@RequestAttribute("userId") Long userId,
+                                      @PathVariable Long agentId,
+                                      @PathVariable String fileName) {
+        return Result.ok(agentFileService.readContent(userId, agentId, fileName));
+    }
+
+    /** 人格文件全量写入：JSON {content} 全量覆盖；仅限 SOUL/IDENTITY/AGENTS.md */
+    @PutMapping("/{fileName}")
+    public Result<AgentFileVO> writeContent(@RequestAttribute("userId") Long userId,
+                                            @PathVariable Long agentId,
+                                            @PathVariable String fileName,
+                                            @RequestBody(required = false) Map<String, String> body) {
+        String content = body == null ? null : body.get("content");
+        return Result.ok(agentFileService.writeContent(userId, agentId, fileName, content));
     }
 }

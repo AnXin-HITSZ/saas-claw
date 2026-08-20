@@ -342,6 +342,12 @@ async def chat_completions(req: ChatCompletionRequest, x_user_id: str | None = H
                         interrupted,
                 ):
                     yield sse
+            except Exception as exc:  # 图 run 中途异常（模型配置缺失/供应商报错等）不能裸抛：ASGI 下
+                # uvicorn 会直接关 TCP、不发 chunked 终止块，客户端（网关）收到 premature close、
+                # 前端拿到断流而非可见错误。转成规范化 SSE error 事件，再由 finally 补 [DONE]，
+                # 让流以带终止块的收尾正常结束。
+                logger.warning("chat SSE 中途异常 conversation=%s: %s", req.conversation_id, exc, exc_info=True)
+                yield _sse({"type": "error", "error": str(exc)[:500]})
             finally:
                 if not interrupted:
                     # 本轮无挂起审批：该 thread 的工具结果缓存已无重放需求，回收防误淘汰/内存膨胀。
@@ -387,6 +393,10 @@ async def approvals_callback(body: ApprovalCallbackBody) -> StreamingResponse:
                     interrupted,
                 ):
                     yield sse
+            except Exception as exc:  # 与 chat_completions 同策略：恢复 run 中途异常转 SSE error，避免
+                # uvicorn 关 TCP 无 chunked 终止块导致客户端（网关/backend 回调方）断流。
+                logger.warning("审批恢复 SSE 中途异常 request_id=%s: %s", body.request_id, exc, exc_info=True)
+                yield _sse({"type": "error", "error": str(exc)[:500]})
             finally:
                 if not interrupted:
                     # 恢复完成、未再次挂起：该 thread 不再有重放需求，回收工具结果缓存。

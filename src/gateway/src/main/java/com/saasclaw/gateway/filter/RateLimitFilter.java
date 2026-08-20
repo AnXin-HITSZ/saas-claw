@@ -36,8 +36,9 @@ public class RateLimitFilter implements GlobalFilter, Ordered {
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        // 限流针对推理链路(/v1/**，按 modelName 计 QPS/RPM/TPM)；
-        // 非 /v1 的认证/管理请求没有 modelName attribute，直接放行，否则会 NPE。
+        // 限流针对推理链路(/v1/** 且带 modelName，按 modelName 计 QPS/RPM/TPM)；
+        // 非 /v1 的认证/管理请求、以及 /v1 下无请求体的会话管理接口（GET /v1/conversations 等）都没有
+        // modelName attribute，直接放行，否则 get("modelName").toString() 会 NPE 500。
         if (!exchange.getRequest().getPath().value().startsWith("/v1/")) {
             return chain.filter(exchange);
         }
@@ -49,11 +50,18 @@ public class RateLimitFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         }
 
+        // modelName/estimatedTokens 仅由 BodyRewriteFilter(-90) 对 POST /v1 注入；
+        // 缺失 = 非推理请求，限流不适用（QPS/RPM/TPM/Burst 全豁免），直接放行。
+        Object modelAttr = exchange.getAttributes().get("modelName");
+        if (modelAttr == null) {
+            return chain.filter(exchange);
+        }
+        String modelName = modelAttr.toString();
+
         if (!flowLimitService.isQpsAllowed(userId, maxUserQps)) {
             return reject(exchange, userId, "QPS limit exceeded");
         }
 
-        String modelName = exchange.getAttributes().get("modelName").toString();
         if (!flowLimitService.isRpmAllowed(userId, modelName, rpmLimit)) {
             return reject(exchange, userId, "RPM limit exceeded");
         }

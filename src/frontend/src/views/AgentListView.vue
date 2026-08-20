@@ -11,6 +11,7 @@ import AppConfirm from '@/components/ui/AppConfirm.vue'
 import AppEmpty from '@/components/ui/AppEmpty.vue'
 import AppSkeleton from '@/components/ui/AppSkeleton.vue'
 import AppSelect, { type SelectOption } from '@/components/ui/AppSelect.vue'
+import AppTag from '@/components/ui/AppTag.vue'
 
 const toast = useToast()
 
@@ -48,6 +49,19 @@ const files = ref<AgentFileVO[]>([])
 const uploadPath = ref('AGENTS.md')
 const fileInput = ref<HTMLInputElement | null>(null)
 const fileBusy = ref(false)
+
+// ---- 人格文件在线查看/编辑 ----
+const personaOptions: SelectOption[] = [
+  { value: 'SOUL.md', label: 'SOUL.md' },
+  { value: 'IDENTITY.md', label: 'IDENTITY.md' },
+  { value: 'AGENTS.md', label: 'AGENTS.md' },
+]
+const personaTarget = ref('AGENTS.md')
+const editingFileName = ref<string | null>(null)
+const editorContent = ref('')
+const editorLoading = ref(false)
+const editorSaving = ref(false)
+const editorIsNew = ref(false)
 
 // ---- 删除确认 ----
 const removing = ref<Agent | null>(null)
@@ -202,6 +216,7 @@ async function toggleSkill(s: Skill) {
 async function openFiles(a: Agent) {
   fileTarget.value = a
   showFiles.value = true
+  editingFileName.value = null
   files.value = []
   fileBusy.value = true
   try {
@@ -211,6 +226,53 @@ async function openFiles(a: Agent) {
   } finally {
     fileBusy.value = false
   }
+}
+
+/** 打开人格文件编辑器：已存在读全文；404 视为新文件（空内容，保存即创建） */
+async function openFileEditor(fileName: string) {
+  if (!fileTarget.value) return
+  editingFileName.value = fileName
+  editorContent.value = ''
+  editorLoading.value = true
+  editorIsNew.value = false
+  try {
+    editorContent.value = await agentApi.getFileContent(fileTarget.value.id, fileName)
+  } catch (e) {
+    if (e instanceof ApiError && e.code === 404) {
+      editorIsNew.value = true
+    } else {
+      toast.error(e instanceof ApiError ? e.message : '读取失败')
+      editingFileName.value = null
+    }
+  } finally {
+    editorLoading.value = false
+  }
+}
+
+async function saveFileEditor() {
+  if (!fileTarget.value || !editingFileName.value) return
+  editorSaving.value = true
+  try {
+    await agentApi.saveFileContent(fileTarget.value.id, editingFileName.value, editorContent.value)
+  } catch (e) {
+    toast.error(e instanceof ApiError ? e.message : '保存失败')
+    return
+  } finally {
+    editorSaving.value = false
+  }
+  toast.success(editorIsNew.value ? '已创建' : '已保存')
+  editingFileName.value = null
+  // 单独刷新列表：失败不影响「已保存」结果，仅提示列表未同步
+  try {
+    files.value = await agentApi.listFiles(fileTarget.value.id)
+  } catch (e) {
+    toast.error(e instanceof ApiError ? e.message : '列表刷新失败')
+  }
+}
+
+function closeFiles() {
+  showFiles.value = false
+  editingFileName.value = null
 }
 async function onPickFile(e: Event) {
   const input = e.target as HTMLInputElement
@@ -399,30 +461,53 @@ onMounted(async () => {
     </AppModal>
 
     <!-- 人格文件 -->
-    <AppModal :show="showFiles" :title="`人格文件 · ${fileTarget?.name ?? ''}`" width="560px" @close="showFiles = false">
-      <div class="upload-bar">
-        <input v-model="uploadPath" class="input mono" style="flex: 1" placeholder="目标路径，如 AGENTS.md" />
-        <input ref="fileInput" type="file" style="display: none" @change="onPickFile" />
-        <AppButton :loading="fileBusy" @click="fileInput?.click()">上传</AppButton>
-      </div>
+    <AppModal :show="showFiles" :title="`人格文件 · ${fileTarget?.name ?? ''}`" width="640px" @close="closeFiles">
+      <!-- 文件列表 / 新建 -->
+      <template v-if="editingFileName === null">
+        <div class="upload-bar">
+          <input v-model="uploadPath" class="input mono" style="flex: 1" placeholder="目标路径，如 AGENTS.md" />
+          <input ref="fileInput" type="file" style="display: none" @change="onPickFile" />
+          <AppButton :loading="fileBusy" @click="fileInput?.click()">上传</AppButton>
+        </div>
+        <div class="upload-bar">
+          <AppSelect v-model="personaTarget" :options="personaOptions" width="200px" />
+          <AppButton variant="ghost" @click="openFileEditor(personaTarget)">查看 / 编辑</AppButton>
+          <span class="text-weak hint">在线创建或修改三份人格文件，保存即生效</span>
+        </div>
 
-      <div v-if="fileBusy" class="empty">处理中…</div>
-      <AppEmpty v-else-if="!files.length" icon="▤" title="暂无文件" description="上传 AGENTS.md / IDENTITY.md / SOUL.md 等作为 Agent 人格。" />
-      <table v-else class="data-table file-table">
-        <thead>
-          <tr><th>文件名</th><th>类型</th><th>大小</th><th style="width: 80px"></th></tr>
-        </thead>
-        <tbody>
-          <tr v-for="f in files" :key="f.id">
-            <td class="mono">{{ f.file_name }}</td>
-            <td class="text-weak">{{ f.file_type }}</td>
-            <td class="text-weak">{{ fmtSize(f.file_size) }}</td>
-            <td>
-              <AppButton variant="danger" size="sm" @click="fileDeleting = f">删除</AppButton>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+        <div v-if="fileBusy" class="empty">处理中…</div>
+        <AppEmpty v-else-if="!files.length" icon="▤" title="暂无文件" description="上传 AGENTS.md / IDENTITY.md / SOUL.md 等作为 Agent 人格，或用上方「查看 / 编辑」在线创建。" />
+        <table v-else class="data-table file-table">
+          <thead>
+            <tr><th>文件名</th><th>类型</th><th>大小</th><th style="width: 150px"></th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="f in files" :key="f.id">
+              <td class="mono">{{ f.file_name }}</td>
+              <td class="text-weak">{{ f.file_type }}</td>
+              <td class="text-weak">{{ fmtSize(f.file_size) }}</td>
+              <td>
+                <AppButton variant="ghost" size="sm" @click="openFileEditor(f.file_name)">编辑</AppButton>
+                <AppButton variant="danger" size="sm" @click="fileDeleting = f">删除</AppButton>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </template>
+
+      <!-- 在线编辑 -->
+      <div v-else class="editor-wrap">
+        <div class="editor-head">
+          <span class="mono editor-name">{{ editingFileName }}</span>
+          <span v-if="editorIsNew" class="text-weak">（尚未创建，保存将新建）</span>
+        </div>
+        <div v-if="editorLoading" class="empty">读取中…</div>
+        <textarea v-else v-model="editorContent" class="textarea editor-textarea mono" spellcheck="false" placeholder="# 在这里编辑人格内容…" />
+        <div class="editor-actions">
+          <AppButton variant="ghost" @click="editingFileName = null">取消</AppButton>
+          <AppButton :loading="editorSaving" @click="saveFileEditor">{{ editorSaving ? '' : '保存' }}</AppButton>
+        </div>
+      </div>
     </AppModal>
 
     <!-- 删除确认 -->
@@ -566,9 +651,42 @@ onMounted(async () => {
   display: flex;
   gap: 10px;
   margin-bottom: 14px;
+  align-items: center;
+}
+.hint {
+  font-size: 12px;
 }
 .file-table {
   margin-top: 4px;
+}
+
+/* 人格文件在线编辑 */
+.editor-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.editor-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.editor-name {
+  font-size: 14px;
+  color: var(--accent);
+}
+.editor-textarea {
+  width: 100%;
+  min-height: 46vh;
+  box-sizing: border-box;
+  resize: vertical;
+  white-space: pre;
+  tab-size: 2;
+}
+.editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .stagger-enter-active {

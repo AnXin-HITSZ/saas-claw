@@ -32,4 +32,9 @@ export const agentApi = {
   },
   deleteFile: (agentId: number, fileId: number) =>
     http.delete<void>(`/agents/${agentId}/files/${fileId}`),
+  // 人格文件内容读取/写入（前端在线查看、编辑；不存在抛 404 视为空文件可创建）
+  getFileContent: (agentId: number, fileName: string) =>
+    http.get<string>(`/agents/${agentId}/files/${fileName}`),
+  saveFileContent: (agentId: number, fileName: string, content: string) =>
+    http.put<AgentFileVO>(`/agents/${agentId}/files/${fileName}`, { content }),
 }

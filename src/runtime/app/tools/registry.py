@@ -9,13 +9,17 @@
 - 敏感工具走审批门（approval_gate），非敏感直接执行。
 """
 import json
+import logging
 from typing import Callable
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
+from langgraph.errors import GraphBubbleUp
 
 from ..db import Tool
 from ..state import ClawState
+
+logger = logging.getLogger(__name__)
 
 
 _TOOL_REGISTRY: dict[str, tuple[BaseTool, bool]] = {}
@@ -128,15 +132,24 @@ async def execute_tool_call(call: dict, state: ClawState, config: RunnableConfig
         config=config, span_id=tool_span, dedup_key=f"{tool_call_id}:tool_start",
     )
 
-    if is_sensitive:
-        from .approval import approval_gate  # 延迟 import：避免与 approval 循环依赖
-        result = await approval_gate(state, name, args, spec["id"], config, tool_fn, tool_call_id)
-    else:
-        # 注入确定性 _tool_call_id：供 spawn_subagent 派生稳定 child span / 注册表 key
-        # （resume 整节点重跑时 tool_call_id 不变，据此可 rehydrate 容器会话）。
-        tool_config = with_state(config, state)
-        tool_config = {**tool_config, "configurable": {**tool_config["configurable"], "_tool_call_id": tool_call_id}}
-        result = await tool_fn.ainvoke(args, config=tool_config)
+    try:
+        if is_sensitive:
+            from .approval import approval_gate  # 延迟 import：避免与 approval 循环依赖
+            result = await approval_gate(state, name, args, spec["id"], config, tool_fn, tool_call_id)
+        else:
+            # 注入确定性 _tool_call_id：供 spawn_subagent 派生稳定 child span / 注册表 key
+            # （resume 整节点重跑时 tool_call_id 不变，据此可 rehydrate 容器会话）。
+            tool_config = with_state(config, state)
+            tool_config = {**tool_config, "configurable": {**tool_config["configurable"], "_tool_call_id": tool_call_id}}
+            result = await tool_fn.ainvoke(args, config=tool_config)
+    except GraphBubbleUp:
+        raise  # langgraph 控制流异常（审批挂起 interrupt / NodeInterrupt / 递归上限）必须透传，
+        # 转文本会吞掉挂起/终止机制；工具本体正常不会抛这类异常。
+    except Exception as exc:
+        # 工具内部异常（workspace 路径越界 ValueError / IO 失败 / 子 Agent 编译失败等）不击穿整轮：
+        # 转成文本结果交还 LLM 自纠（与 call_agent 子 Agent 失败处理对齐），trace 照常记 tool_end。
+        logger.warning("工具执行失败 tool=%s: %s", name, exc, exc_info=True)
+        result = f"工具执行失败：{exc}"
 
     await emit_event(
         state, EVT_TOOL_END, {"tool": name, "result_summary": _summarize_text(result)},

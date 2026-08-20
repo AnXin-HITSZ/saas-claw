@@ -70,11 +70,11 @@ async def call_agent(agent_id: int, task: str, *, config: RunnableConfig) -> str
         config=config, span_id=child_span_id, parent_id=config.get("configurable", {}).get("span_id"),
     )
 
-    subgraph = get_agent_subgraph(agent, assembled["model_config"], assembled["tool_specs"])
     try:
+        subgraph = get_agent_subgraph(agent, assembled["model_config"], assembled["tool_specs"])
         final_state = await subgraph.ainvoke(child_state, config=child_config)
     except Exception as exc:
-        # 子 Agent 异常（LLM 失败/内部敏感工具 interrupt）不静默击穿父轮次：显式返回错误给父 LLM。
+        # 子 Agent 异常（LLM 失败/内部敏感工具 interrupt/子图编译失败）不静默击穿父轮次：显式返回错误给父 LLM。
         await emit_event(
             state, EVT_SUBAGENT_END,
             {"agent_id": agent_id, "status": "error"},
