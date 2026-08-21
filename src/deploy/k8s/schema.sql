@@ -308,3 +308,9 @@ CREATE TABLE skill_installation (
 -- INSERT INTO model_config (name, provider, model_name, endpoint, api_key) VALUES
 --     ('deepseek-v4-flash', 'deepseek', '<供应商侧模型名>', 'https://api.deepseek.com/v1', '<YOUR_API_KEY>'),
 --     ('deepseek-v4-pro',   'deepseek', '<供应商侧模型名>', 'https://api.deepseek.com/v1', '<YOUR_API_KEY>');
+
+-- ============================================
+-- tool 预设值数据
+-- ============================================
+INSERT INTO tool (name, description, schema_json, is_sensitive, status, created_at, update_at) VALUES
+    ();
