@@ -265,6 +265,7 @@ CREATE TABLE tool_approval_batch (
     agent_id      BIGINT       NOT NULL,       -- 发起 spawn 的父 Agent
     sub_requests  TEXT         NOT NULL,       -- 子请求明细 JSON 数组
     action        TINYINT      DEFAULT NULL,   -- 整体决策 1=允许 2=拒绝 3=自定义消息
+    custom_message VARCHAR(512) DEFAULT NULL,  -- action=3 时整体决策自定义消息
     decision_json TEXT         DEFAULT NULL,   -- 逐子请求决策 JSON（null=按整体决策）
     status        TINYINT      DEFAULT 0,      -- 0=待审批 1=已处理
     created_at    DATETIME     DEFAULT CURRENT_TIMESTAMP,

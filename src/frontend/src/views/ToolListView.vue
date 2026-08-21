@@ -245,7 +245,7 @@ onMounted(load)
 
     <!-- Schema 弹窗 -->
     <AppModal :show="showDetail" :title="detail?.name || '工具'" width="640px" @close="showDetail = false">
-      <div class="text-weak" style="margin-bottom: 10px">{{ detail?.description || '无描述' }}</div>
+      <div class="text-weak" style="margin-bottom: 10px; white-space: pre-line">{{ detail?.description || '无描述' }}</div>
       <pre class="schema">{{ prettySchema(detail?.schema_json ?? null) }}</pre>
       <template #actions>
         <AppButton variant="ghost" @click="showDetail = false">关闭</AppButton>
@@ -266,7 +266,7 @@ onMounted(load)
       </div>
       <div class="form-item">
         <label>描述</label>
-        <input v-model="form.description" class="input" placeholder="工具用途说明" />
+        <textarea v-model="form.description" class="textarea" rows="3" placeholder="工具用途说明（支持换行）" />
       </div>
       <div class="form-item">
         <label>入参 Schema（JSON Schema 字符串）</label>
@@ -348,9 +348,13 @@ onMounted(load)
   margin: 12px 0;
   font-size: 13px;
   color: var(--text-secondary);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: pre-line;
+  word-break: break-word;
 }
 .card-actions {
   display: flex;
