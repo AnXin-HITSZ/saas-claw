@@ -222,6 +222,7 @@ async function send() {
           type?: string
           event?: TraceEvent
           payload?: { request_id?: string }
+          error?: string
         }
         if (o.type === 'trace_event' && o.event) {
           // 实时过程帧：与 trace 落盘事件同构，过滤轮次边界后入时间轴
@@ -235,6 +236,13 @@ async function send() {
           const rid = o.payload?.request_id
           liveAssistant.value += `\n\n⏸️ 触发工具审批（request_id=${rid ?? '?'}），请到「工具审批」处理后刷新本会话查看结果。`
           toast.info('该操作需要人工审批')
+          scrollBottom()
+          return
+        }
+        if (o.type === 'error') {
+          // runtime 图 run 中途异常（模型配置缺失/供应商报错等）：显式展示，不静默吞掉
+          liveAssistant.value += `\n\n[出错] ${o.error ?? '未知错误'}`
+          toast.error('对话出错')
           scrollBottom()
           return
         }

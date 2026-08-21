@@ -110,6 +110,7 @@ CREATE TABLE agent (
     version        VARCHAR(32)  DEFAULT '1.0.0',
     author         VARCHAR(64)  DEFAULT NULL,
     status         TINYINT      DEFAULT 1,
+    template       VARCHAR(32)  NOT NULL DEFAULT 'react', -- 子图模板分派（当前仅 react）
     created_at     DATETIME     DEFAULT CURRENT_TIMESTAMP,
     updated_at     DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uk_user_alias (user_id, alias),       -- 用户级唯一（核心约束）
