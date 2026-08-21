@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
-import { agentApi, chatApi, ApiError } from '@/api'
+import { agentApi, approvalApi, chatApi, ApiError } from '@/api'
+import { APPROVAL_ACTION } from '@/types/api'
 import type { Agent, ConversationMeta, TraceEvent, TraceItem } from '@/types/api'
 import { useToast } from '@/composables/useToast'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppEmpty from '@/components/ui/AppEmpty.vue'
+import AppModal from '@/components/ui/AppModal.vue'
 import AppSelect, { type SelectOption } from '@/components/ui/AppSelect.vue'
 import renderMarkdown from '@/utils/markdown'
 
@@ -42,6 +44,119 @@ const canSend = computed(
 )
 
 const md = (t: string) => renderMarkdown(t)
+
+// ---- 对话页审批弹窗（SSE __interrupt__ → 弹窗直批，不必跳「工具审批」页） ----
+// SSE 中断帧自带全部展示字段（tool_name/input_summary/request_id），
+// 提交走按 request_id 直达的 handleByRequest / handleBatchByRequest，无需反查 DB id。
+type ApprovalEntry =
+  | {
+      kind: 'single'
+      request_id: string
+      agent_id: number
+      tool_name: string
+      input_summary: string
+    }
+  | {
+      kind: 'batch'
+      request_id: string
+      agent_id: number
+      sub_requests: {
+        tool_name?: string
+        input_summary?: string
+        tool_id?: number | null
+      }[]
+    }
+const approvalQueue = ref<ApprovalEntry[]>([]) // 并发多审批排队，队首即当前展示项
+const showApproval = ref(false)
+const approvalBusy = ref(false)
+const approvalAction = ref<number | null>(null)
+const approvalCustomMode = ref(false)
+const approvalCustomMsg = ref('')
+
+const activeApproval = computed<ApprovalEntry | undefined>(() => approvalQueue.value[0])
+const pendingApprovalCount = computed(() => approvalQueue.value.length)
+
+const agentNameOf = (id: number) => agents.value.find((a) => a.id === id)?.name ?? `#${id}`
+
+// 中断帧入队：tool_approval=单条，batch_approval=批量（spawn 聚合），无法识别返回 false 走旧提示
+function enqueueApproval(payload: {
+  type?: string
+  request_id?: string
+  agent_id?: number
+  tool_name?: string
+  input_summary?: string
+  sub_requests?: { tool_name?: string; input_summary?: string; tool_id?: number | null }[]
+}): boolean {
+  if (payload.type === 'tool_approval' && payload.request_id) {
+    approvalQueue.value.push({
+      kind: 'single',
+      request_id: payload.request_id,
+      agent_id: payload.agent_id ?? 0,
+      tool_name: payload.tool_name ?? '',
+      input_summary: payload.input_summary ?? '',
+    })
+    return true
+  }
+  if (payload.type === 'batch_approval' && payload.request_id) {
+    approvalQueue.value.push({
+      kind: 'batch',
+      request_id: payload.request_id,
+      agent_id: payload.agent_id ?? 0,
+      sub_requests: payload.sub_requests ?? [],
+    })
+    return true
+  }
+  return false
+}
+
+async function submitApproval(action: number, message?: string) {
+  const item = activeApproval.value
+  if (!item || approvalBusy.value) return
+  approvalBusy.value = true
+  approvalAction.value = action
+  try {
+    if (item.kind === 'single') {
+      await approvalApi.handleByRequest(item.request_id, { action, custom_message: message })
+    } else {
+      await approvalApi.handleBatchByRequest(item.request_id, { action, custom_message: message })
+    }
+    toast.success('已处理')
+    approvalQueue.value.splice(0, 1) // 出队，activeApproval 自动推进
+    approvalCustomMode.value = false
+    approvalCustomMsg.value = ''
+    if (!approvalQueue.value.length) showApproval.value = false
+    afterApprovalHandled()
+  } catch (e) {
+    toast.error(e instanceof ApiError ? e.message : '处理失败')
+  } finally {
+    approvalBusy.value = false
+    approvalAction.value = null
+  }
+}
+
+function openApprovalCustom() {
+  approvalCustomMsg.value = ''
+  approvalCustomMode.value = true
+}
+function submitApprovalCustom() {
+  if (!approvalCustomMsg.value.trim()) return toast.error('请输入自定义消息')
+  submitApproval(APPROVAL_ACTION.CUSTOM, approvalCustomMsg.value.trim())
+}
+
+function closeApproval() {
+  showApproval.value = false // 关闭仅隐藏，队列保留，浮动徽标可再次打开
+}
+
+function afterApprovalHandled() {
+  // 审批回调在 backend 线程池 fire-and-forget，runtime 恢复图执行、trace 落盘有延迟：
+  // 延迟两次刷新当前会话，捕获恢复后的完整回复；期间切会话或发起新流则跳过，避免打断
+  const convId = currentConv.value
+  const reload = () => {
+    if (convId && convId === currentConv.value && !streaming.value) openConversation(convId)
+  }
+  setTimeout(reload, 1000)
+  setTimeout(reload, 3200)
+}
 
 // langchain 角色 → 前端展示角色
 function normRole(role: string): 'user' | 'assistant' | 'system' | 'tool' {
@@ -224,7 +339,14 @@ async function send() {
           choices?: { delta?: { content?: string } }[]
           type?: string
           event?: TraceEvent
-          payload?: { request_id?: string }
+          payload?: {
+            type?: string
+            request_id?: string
+            agent_id?: number
+            tool_name?: string
+            input_summary?: string
+            sub_requests?: { tool_name?: string; input_summary?: string; tool_id?: number | null }[]
+          }
           error?: string
         }
         if (o.type === 'trace_event' && o.event) {
@@ -236,6 +358,14 @@ async function send() {
           return
         }
         if (o.type === '__interrupt__') {
+          // 弹窗直批：tool_approval/batch_approval 帧入队并弹出；无法识别的载荷退回原提示
+          if (o.payload && enqueueApproval(o.payload)) {
+            showApproval.value = true
+            liveAssistant.value += '\n\n⏸️ 工具调用需要审批，请在弹窗中处理。'
+            toast.info('该操作需要人工审批')
+            scrollBottom()
+            return
+          }
           const rid = o.payload?.request_id
           liveAssistant.value += `\n\n⏸️ 触发工具审批（request_id=${rid ?? '?'}），请到「工具审批」处理后刷新本会话查看结果。`
           toast.info('该操作需要人工审批')
@@ -379,6 +509,72 @@ onMounted(async () => {
       </div>
     </main>
   </div>
+
+  <!-- 审批浮动徽标：弹窗被关闭但队列仍有待处理时，悬浮提示可再次打开 -->
+  <Transition name="pop">
+    <button
+      v-if="pendingApprovalCount && !showApproval"
+      class="approval-float"
+      @click="showApproval = true"
+    >
+      ⏸ 审批（{{ pendingApprovalCount }}）
+    </button>
+  </Transition>
+
+  <!-- 对话页审批弹窗：SSE 中断帧入队后弹出，直批不跳页 -->
+  <AppModal :show="showApproval" title="工具审批" width="560px" @close="closeApproval">
+    <template v-if="activeApproval">
+      <div v-if="pendingApprovalCount > 1" class="approval-queue-hint">
+        还有 {{ pendingApprovalCount - 1 }} 条审批待处理
+      </div>
+
+      <div v-if="activeApproval.kind === 'single'" class="approval-card">
+        <div class="approval-agent">{{ agentNameOf(activeApproval.agent_id) }}</div>
+        <div class="approval-line">
+          <span class="mono">{{ activeApproval.tool_name || '未知工具' }}</span>
+          <span class="text-weak">{{ activeApproval.input_summary }}</span>
+        </div>
+      </div>
+
+      <div v-else class="approval-card">
+        <div class="approval-agent">{{ agentNameOf(activeApproval.agent_id) }}（批量）</div>
+        <div class="approval-subs">
+          <div v-for="(s, i) in activeApproval.sub_requests" :key="i" class="approval-sub">
+            <span class="mono">{{ s.tool_name || '未知工具' }}</span>
+            <span class="text-weak">{{ s.input_summary || '' }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="approvalCustomMode" class="form-item" style="margin-top: 14px">
+        <label>自定义消息（将作为工具结果返回给 Agent）</label>
+        <textarea v-model="approvalCustomMsg" class="textarea" rows="3" placeholder="输入要返回的内容…" />
+      </div>
+    </template>
+    <template #actions>
+      <AppButton variant="ghost" @click="closeApproval">稍后处理</AppButton>
+      <template v-if="approvalCustomMode">
+        <AppButton variant="ghost" :disabled="approvalBusy" @click="approvalCustomMode = false">取消</AppButton>
+        <AppButton :loading="approvalBusy" @click="submitApprovalCustom">提交</AppButton>
+      </template>
+      <template v-else>
+        <AppButton variant="ghost" :disabled="approvalBusy" @click="openApprovalCustom">自定义</AppButton>
+        <AppButton
+          variant="danger"
+          :loading="approvalBusy && approvalAction === APPROVAL_ACTION.DENY"
+          :disabled="approvalBusy"
+          @click="submitApproval(APPROVAL_ACTION.DENY)"
+          >拒绝</AppButton
+        >
+        <AppButton
+          :loading="approvalBusy && approvalAction === APPROVAL_ACTION.ALLOW"
+          :disabled="approvalBusy"
+          @click="submitApproval(APPROVAL_ACTION.ALLOW)"
+          >允许</AppButton
+        >
+      </template>
+    </template>
+  </AppModal>
 </template>
 
 <style scoped>
@@ -710,5 +906,93 @@ onMounted(async () => {
   .conv-list {
     display: none;
   }
+}
+
+/* ---------- 对话页审批弹窗 ---------- */
+.approval-queue-hint {
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--accent-glow);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+.approval-card {
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warning);
+}
+.approval-agent {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+}
+.approval-line {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+}
+.approval-line .mono {
+  flex-shrink: 0;
+  color: var(--accent-2);
+  font-size: 13px;
+}
+.approval-subs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.approval-sub {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+}
+.approval-sub .mono {
+  flex-shrink: 0;
+  color: var(--accent-2);
+  font-size: 12.5px;
+}
+.approval-sub .text-weak {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 浮动审批徽标 */
+.approval-float {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 980;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--bg-surface);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: var(--shadow), var(--glow-accent);
+  transition: transform 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);
+}
+.approval-float:hover {
+  transform: translateY(-1px);
+}
+.pop-enter-active,
+.pop-leave-active {
+  transition: opacity 0.2s var(--ease-out), transform 0.2s var(--ease-out);
+}
+.pop-enter-from,
+.pop-leave-to {
+  opacity: 0;
+  transform: translateY(8px) scale(0.95);
 }
 </style>

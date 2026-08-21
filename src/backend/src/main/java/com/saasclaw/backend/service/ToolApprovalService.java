@@ -23,4 +23,7 @@ public interface ToolApprovalService {
 
     /** 审批（人工通道）：允许/拒绝/自定义消息，完成后 Redis 广播 SSE */
     void handle(Long userId, Long approvalId, HandleApprovalRequest request);
+
+    /** 按 requestId 审批（人工通道）：对话页审批弹窗直达，省去前端按 request_id 反查 DB id */
+    void handleByRequestId(Long userId, String requestId, HandleApprovalRequest request);
 }

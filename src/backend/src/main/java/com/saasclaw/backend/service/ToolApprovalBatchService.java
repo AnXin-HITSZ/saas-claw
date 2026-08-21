@@ -15,6 +15,9 @@ public interface ToolApprovalBatchService {
     /** 处理批量审批（人工通道）：整体决策 + 可选逐子请求覆盖，完成后回调 runtime 恢复主图 */
     void handle(Long userId, Long batchId, HandleApprovalBatchRequest request);
 
+    /** 按 requestId 处理批量审批（人工通道）：对话页审批弹窗直达，省去前端按 request_id 反查 DB id */
+    void handleByRequestId(Long userId, String requestId, HandleApprovalBatchRequest request);
+
     /** 我的待审批批量列表 */
     List<ApprovalBatchVO> listPending(Long userId);
 

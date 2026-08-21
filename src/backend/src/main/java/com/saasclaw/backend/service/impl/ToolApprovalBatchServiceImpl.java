@@ -74,7 +74,19 @@ public class ToolApprovalBatchServiceImpl implements ToolApprovalBatchService {
 
     @Override
     public void handle(Long userId, Long batchId, HandleApprovalBatchRequest request) {
-        ToolApprovalBatch record = batchMapper.selectById(batchId);
+        doHandle(userId, batchMapper.selectById(batchId), request);
+    }
+
+    @Override
+    public void handleByRequestId(Long userId, String requestId, HandleApprovalBatchRequest request) {
+        ToolApprovalBatch record = batchMapper.selectOne(
+                new LambdaQueryWrapper<ToolApprovalBatch>()
+                        .eq(ToolApprovalBatch::getRequestId, requestId));
+        doHandle(userId, record, request);
+    }
+
+    /** 批量审批核心：校验所有权/状态/action，落库 + 回调 runtime 恢复挂起主图 */
+    private void doHandle(Long userId, ToolApprovalBatch record, HandleApprovalBatchRequest request) {
         if (record == null || !record.getUserId().equals(userId)) {
             throw new BizException(404, "审批请求不存在");
         }

@@ -121,7 +121,19 @@ public class ToolApprovalServiceImpl implements ToolApprovalService {
 
     @Override
     public void handle(Long userId, Long approvalId, HandleApprovalRequest request) {
-        ToolApproval record = toolApprovalMapper.selectById(approvalId);
+        doHandle(userId, toolApprovalMapper.selectById(approvalId), request);
+    }
+
+    @Override
+    public void handleByRequestId(Long userId, String requestId, HandleApprovalRequest request) {
+        ToolApproval record = toolApprovalMapper.selectOne(
+                new LambdaQueryWrapper<ToolApproval>()
+                        .eq(ToolApproval::getRequestId, requestId));
+        doHandle(userId, record, request);
+    }
+
+    /** 审批核心：校验所有权/状态/action，落库 + Redis 广播 + 回调 runtime 恢复挂起图 */
+    private void doHandle(Long userId, ToolApproval record, HandleApprovalRequest request) {
         if (record == null || !record.getUserId().equals(userId)) {
             throw new BizException(404, "审批请求不存在");
         }

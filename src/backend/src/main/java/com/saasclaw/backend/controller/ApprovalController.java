@@ -42,6 +42,15 @@ public class ApprovalController {
         return Result.ok();
     }
 
+    /** 处理审批（按 requestId 直达）：对话页审批弹窗使用，省去前端按 request_id 反查 DB id */
+    @PostMapping("/by-request/{requestId}/handle")
+    public Result<Void> handleByRequest(@RequestAttribute("userId") Long userId,
+                                        @PathVariable String requestId,
+                                        @Valid @RequestBody HandleApprovalRequest request) {
+        toolApprovalService.handleByRequestId(userId, requestId, request);
+        return Result.ok();
+    }
+
     // ---------- 批量审批（spawn_subagent 聚合，一张卡覆盖多路子请求） ----------
 
     /** 我的待审批批量列表 */
@@ -62,6 +71,15 @@ public class ApprovalController {
                                     @PathVariable Long batchId,
                                     @Valid @RequestBody HandleApprovalBatchRequest request) {
         toolApprovalBatchService.handle(userId, batchId, request);
+        return Result.ok();
+    }
+
+    /** 处理批量审批（按 requestId 直达）：对话页审批弹窗使用，省去前端按 request_id 反查 DB id */
+    @PostMapping("/batches/by-request/{requestId}/handle")
+    public Result<Void> handleBatchByRequest(@RequestAttribute("userId") Long userId,
+                                             @PathVariable String requestId,
+                                             @Valid @RequestBody HandleApprovalBatchRequest request) {
+        toolApprovalBatchService.handleByRequestId(userId, requestId, request);
         return Result.ok();
     }
 }
