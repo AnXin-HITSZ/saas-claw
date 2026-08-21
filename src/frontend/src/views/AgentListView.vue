@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { agentApi, clawApi, skillApi, ApiError } from '@/api'
-import type { Agent, Claw, Skill, AgentFileVO } from '@/types/api'
+import { agentApi, clawApi, skillApi, modelConfigApi, ApiError } from '@/api'
+import type { Agent, Claw, Skill, AgentFileVO, ModelConfig } from '@/types/api'
 import { useToast } from '@/composables/useToast'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import AppButton from '@/components/ui/AppButton.vue'
@@ -18,8 +18,19 @@ const toast = useToast()
 const claws = ref<Claw[]>([])
 const agents = ref<Agent[]>([])
 const allSkills = ref<Skill[]>([])
+const modelConfigs = ref<ModelConfig[]>([]) // 基础模型下拉数据源（后端已排除 router）
 const loading = ref(false)
 const filterClawId = ref<number | 'all' | null>('all')
+
+/** 基础模型下拉选项；编辑时若原模型已停用/移除，追加只读占位项避免丢失展示 */
+const modelOptions = computed<SelectOption[]>(() => {
+  const base: SelectOption[] = modelConfigs.value.map((m) => ({ value: m.name, label: m.name }))
+  const cur = editing.value?.base_model
+  if (cur && !base.some((o) => o.value === cur)) {
+    base.unshift({ value: cur, label: `${cur}（已停用/移除）`, disabled: true })
+  }
+  return base
+})
 
 // ---- 创建/编辑 ----
 const showEdit = ref(false)
@@ -83,10 +94,16 @@ const filteredAgents = computed(() =>
 async function loadAll() {
   loading.value = true
   try {
-    const [c, a, s] = await Promise.all([clawApi.list(), agentApi.list(), skillApi.list()])
+    const [c, a, s, m] = await Promise.all([
+      clawApi.list(),
+      agentApi.list(),
+      skillApi.list(),
+      modelConfigApi.list(),
+    ])
     claws.value = c
     agents.value = a
     allSkills.value = s
+    modelConfigs.value = m
   } catch (e) {
     toast.error(e instanceof ApiError ? e.message : '加载失败')
   } finally {
@@ -129,7 +146,7 @@ async function save() {
     if (!form.claw_id) return toast.error('请选择 Claw')
     if (!form.alias.trim()) return toast.error('请输入 alias')
     if (!form.name.trim()) return toast.error('请输入名称')
-    if (!form.base_model.trim()) return toast.error('请输入基础模型')
+    if (!form.base_model) return toast.error('请选择基础模型')
   }
   submitting.value = true
   try {
@@ -413,7 +430,12 @@ onMounted(async () => {
       </div>
       <div class="form-item">
         <label>基础模型</label>
-        <input v-model="form.base_model" class="input" placeholder="如 deepseek-v4-flash" />
+        <AppSelect
+          v-model="form.base_model"
+          :options="modelOptions"
+          placeholder="选择模型"
+          :width="'100%'"
+        />
       </div>
       <div class="form-item">
         <label>描述</label>

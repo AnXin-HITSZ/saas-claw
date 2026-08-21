@@ -36,6 +36,20 @@ const statusOptions: SelectOption[] = [
   { value: 0, label: '停用' },
 ]
 
+// ---- 路由模型（router）配置：独立于业务模型，供主图路由专用 ----
+const router = ref<ModelConfig | null>(null)
+const routerMissing = ref(false)
+const routerLoading = ref(false)
+const showRouterEdit = ref(false)
+const routerSaving = ref(false)
+const routerForm = reactive({
+  provider: '',
+  model_name: '',
+  endpoint: '',
+  api_key: '',
+  status: 1 as number | null,
+})
+
 async function load() {
   loading.value = true
   try {
@@ -44,6 +58,62 @@ async function load() {
     toast.error(e instanceof ApiError ? e.message : '加载失败')
   } finally {
     loading.value = false
+  }
+}
+
+async function loadRouter() {
+  routerLoading.value = true
+  try {
+    router.value = await modelConfigApi.getRouter()
+    routerMissing.value = false
+  } catch (e) {
+    if (e instanceof ApiError && e.code === 404) {
+      router.value = null
+      routerMissing.value = true
+    } else {
+      toast.error(e instanceof ApiError ? e.message : '路由模型加载失败')
+    }
+  } finally {
+    routerLoading.value = false
+  }
+}
+
+function openRouterEdit() {
+  Object.assign(routerForm, {
+    provider: router.value?.provider ?? '',
+    model_name: router.value?.model_name ?? '',
+    endpoint: router.value?.endpoint ?? '',
+    api_key: '', // 明文不回显，留空表示不修改
+    status: router.value?.status ?? 1,
+  })
+  showRouterEdit.value = true
+}
+
+async function saveRouter() {
+  // 路由行未配置时视为创建，需完整填写
+  if (routerMissing.value) {
+    if (!routerForm.provider.trim()) return toast.error('请输入供应商')
+    if (!routerForm.model_name.trim()) return toast.error('请输入模型名')
+    if (!routerForm.endpoint.trim()) return toast.error('请输入 Endpoint')
+    if (!routerForm.api_key.trim()) return toast.error('请输入 API Key')
+  }
+  routerSaving.value = true
+  try {
+    await modelConfigApi.updateRouter({
+      provider: routerForm.provider.trim() || undefined,
+      model_name: routerForm.model_name.trim() || undefined,
+      endpoint: routerForm.endpoint.trim() || undefined,
+      api_key: routerForm.api_key.trim() || undefined,
+      status: routerForm.status ?? 1,
+    })
+    toast.success('已保存')
+    showRouterEdit.value = false
+    await loadRouter()
+    await load()
+  } catch (e) {
+    toast.error(e instanceof ApiError ? e.message : '保存失败')
+  } finally {
+    routerSaving.value = false
   }
 }
 
@@ -120,7 +190,10 @@ async function confirmRemove() {
   }
 }
 
-onMounted(load)
+onMounted(() => {
+  load()
+  loadRouter()
+})
 </script>
 
 <template>
@@ -130,6 +203,31 @@ onMounted(load)
         <AppButton @click="openCreate">新增配置</AppButton>
       </template>
     </PageHeader>
+
+    <!-- 路由模型（主图路由专用，独立于业务模型） -->
+    <div class="router-card card">
+      <div class="router-head">
+        <div>
+          <h3>路由模型 <span class="router-badge mono">router</span></h3>
+          <p class="router-desc">主图路由专用 LLM，独立于业务模型配置，不参与 Agent 基础模型选择。</p>
+        </div>
+        <AppButton variant="ghost" @click="openRouterEdit">
+          {{ router ? '编辑路由模型' : '配置路由模型' }}
+        </AppButton>
+      </div>
+      <div v-if="routerLoading" class="empty">加载中…</div>
+      <div v-else-if="routerMissing" class="router-empty">
+        尚未配置路由模型。未指定 Agent 的对话将无法自动路由，请先配置。
+      </div>
+      <div v-else-if="router" class="router-meta">
+        <span class="meta-item">供应商 <span class="mono">{{ router.provider }}</span></span>
+        <span class="meta-item">模型 <span class="mono">{{ router.model_name }}</span></span>
+        <span class="meta-item endpoint">Endpoint <span class="mono">{{ router.endpoint }}</span></span>
+        <AppTag :tone="router.status === 1 ? 'success' : 'neutral'" pulse>
+          {{ router.status === 1 ? '启用' : '停用' }}
+        </AppTag>
+      </div>
+    </div>
 
     <!-- 骨架 -->
     <div v-if="loading" class="grid">
@@ -218,6 +316,34 @@ onMounted(load)
       </template>
     </AppModal>
 
+    <!-- 路由模型编辑弹窗 -->
+    <AppModal :show="showRouterEdit" title="路由模型配置" width="540px" @close="showRouterEdit = false">
+      <div class="form-item">
+        <label>供应商</label>
+        <input v-model="routerForm.provider" class="input" placeholder="如 deepseek / openai" />
+      </div>
+      <div class="form-item">
+        <label>模型名</label>
+        <input v-model="routerForm.model_name" class="input mono" placeholder="如 deepseek-chat" />
+      </div>
+      <div class="form-item">
+        <label>Endpoint</label>
+        <input v-model="routerForm.endpoint" class="input mono" placeholder="https://api.xxx.com/v1" />
+      </div>
+      <div class="form-item">
+        <label>API Key {{ router ? '（留空则不修改）' : '' }}</label>
+        <input v-model="routerForm.api_key" class="input mono" type="password" placeholder="sk-..." />
+      </div>
+      <div class="form-item">
+        <label>状态</label>
+        <AppSelect v-model="routerForm.status" :options="statusOptions" placeholder="选择状态" />
+      </div>
+      <template #actions>
+        <AppButton variant="ghost" @click="showRouterEdit = false">取消</AppButton>
+        <AppButton :loading="routerSaving" @click="saveRouter">{{ routerSaving ? '' : '保存' }}</AppButton>
+      </template>
+    </AppModal>
+
     <!-- 删除确认 -->
     <AppConfirm
       :show="!!removing"
@@ -233,6 +359,54 @@ onMounted(load)
 </template>
 
 <style scoped>
+/* 路由模型卡片 */
+.router-card {
+  margin-bottom: 18px;
+  padding: 16px 18px;
+}
+.router-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.router-head h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+.router-badge {
+  font-size: 12px;
+  color: var(--accent);
+}
+.router-desc {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.router-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.router-meta .mono {
+  color: var(--text-secondary);
+}
+.router-meta .endpoint .mono {
+  word-break: break-all;
+}
+.router-empty {
+  padding: 10px 12px;
+  background: var(--bg-deep);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 .model-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));

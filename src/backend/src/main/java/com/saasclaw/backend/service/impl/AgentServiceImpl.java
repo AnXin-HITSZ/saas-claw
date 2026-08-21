@@ -3,6 +3,7 @@ package com.saasclaw.backend.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.saasclaw.backend.common.BizException;
+import com.saasclaw.backend.common.RouterConstants;
 import com.saasclaw.backend.dto.AgentCreateRequest;
 import com.saasclaw.backend.dto.AgentUpdateRequest;
 import com.saasclaw.backend.entity.Agent;
@@ -54,7 +55,10 @@ public class AgentServiceImpl implements AgentService {
             throw new BizException(400, "Claw 不存在");
         }
 
-        // 2. base_model 引用校验：必须指向存在的 model_config
+        // 2. base_model 引用校验：router 为路由专用保留名，Agent 禁止绑定
+        if (RouterConstants.NAME.equals(request.getBaseModel())) {
+            throw new BizException(400, "router 是主图路由专用模型，不可作为 Agent 基础模型");
+        }
         Long modelCount = modelConfigMapper.selectCount(
                 new LambdaQueryWrapper<ModelConfig>()
                         .eq(ModelConfig::getName, request.getBaseModel())
@@ -93,8 +97,11 @@ public class AgentServiceImpl implements AgentService {
     public Agent update(Long userId, Long id, AgentUpdateRequest request) {
         getOwned(userId, id);
 
-        // 改了 base_model 则校验引用存在
+        // 改了 base_model 则校验引用存在（router 为路由专用保留名，不可绑定）
         if (request.getBaseModel() != null) {
+            if (RouterConstants.NAME.equals(request.getBaseModel())) {
+                throw new BizException(400, "router 是主图路由专用模型，不可作为 Agent 基础模型");
+            }
             Long modelCount = modelConfigMapper.selectCount(
                     new LambdaQueryWrapper<ModelConfig>()
                             .eq(ModelConfig::getName, request.getBaseModel())

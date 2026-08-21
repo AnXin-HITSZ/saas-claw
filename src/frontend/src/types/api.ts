@@ -139,6 +139,14 @@ export interface ModelConfigUpdateRequest {
   api_key?: string
   status?: number
 }
+/** 路由模型（router）配置：仅管理员通过 /model-configs/router 读写，不进入业务模型列表 */
+export interface RouterConfigUpdateRequest {
+  provider?: string
+  model_name?: string
+  endpoint?: string
+  api_key?: string
+  status?: number
+}
 export interface ModelConfig {
   id: number
   name: string
