@@ -264,8 +264,11 @@ def _conv_list_key() -> str:
 
 
 async def _touch_conversation(conversation_id: str) -> None:
-    """首次见到的会话登记进列表；已有则跳过（HSETNX 幂等）。"""
-    created = await _kv.hsetnx(_conv_index_key(), conversation_id, "{}")
+    """首次见到的会话登记进列表；已有则跳过（HSETNX 幂等）。
+    占位带 conversation_id：真实 meta 由聊天结束的 _update_conversation_meta 回填；
+    若回填失败（图 run 异常/Redis 抖动），列表项仍带 id，前端不会因缺字段渲染崩。"""
+    created = await _kv.hsetnx(_conv_index_key(), conversation_id,
+                               json.dumps({"conversation_id": conversation_id}))
     if created:
         await _kv.lpush(_conv_list_key(), conversation_id)
 
@@ -424,9 +427,13 @@ async def list_conversations() -> dict:
     for cid, raw in zip(ids, metas):
         if raw:
             try:
-                items.append(json.loads(raw))
+                meta = json.loads(raw)
             except (TypeError, json.JSONDecodeError):
                 continue
+            # 占位缺失/损坏的条目不露出（无 conversation_id 无法被前端消费）
+            if not isinstance(meta, dict) or not meta.get("conversation_id"):
+                continue
+            items.append(meta)
     return {"list": items}
 
 

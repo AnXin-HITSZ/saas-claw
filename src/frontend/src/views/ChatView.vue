@@ -4,6 +4,7 @@ import { agentApi, chatApi, ApiError } from '@/api'
 import type { Agent, ConversationMeta, TraceEvent, TraceItem } from '@/types/api'
 import { useToast } from '@/composables/useToast'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppEmpty from '@/components/ui/AppEmpty.vue'
 import AppSelect, { type SelectOption } from '@/components/ui/AppSelect.vue'
 import renderMarkdown from '@/utils/markdown'
 
@@ -71,7 +72,9 @@ async function loadAgents() {
 async function loadConversations() {
   try {
     const res = await chatApi.listConversations()
-    conversations.value = res.list || []
+    // 过滤缺 conversation_id 的脏条目（runtime 占位 `{}` 未回填时会出现），
+    // 否则模板对 undefined 调 .slice 会抛 TypeError 把整页渲染搞白
+    conversations.value = (res.list || []).filter((c) => !!c.conversation_id)
   } catch (e) {
     toast.error(e instanceof ApiError ? e.message : '加载会话失败')
   }
@@ -302,7 +305,7 @@ onMounted(async () => {
           @click="openConversation(c.conversation_id)"
         >
           <div class="conv-summary">{{ c.last_summary || '（空会话）' }}</div>
-          <div class="conv-id mono">{{ c.conversation_id.slice(0, 8) }}</div>
+          <div class="conv-id mono">{{ (c.conversation_id || '').slice(0, 8) }}</div>
         </div>
         <AppEmpty v-if="!conversations.length" icon="◈" title="暂无历史会话" description="开始第一段对话吧。" />
       </div>
