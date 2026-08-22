@@ -147,15 +147,62 @@ function closeApproval() {
   showApproval.value = false // 关闭仅隐藏，队列保留，浮动徽标可再次打开
 }
 
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms))
+}
+
+// 审批处理后的时间轴刷新：轮询 trace，直到恢复 run 的完整回复落盘。
+// 只做“前进式”替换——新时间轴比当前更全（或已含 assistant 回复）才应用，
+// 不清空、不降级，因此不会出现「清空 timeline → welcome 空态」的闪白；
+// 期间切会话或发起新流则按流代次放弃。
+async function refreshTimelineAfterApproval(convId: string, gen: number) {
+  let lastLen = -1
+  let gotReply = false
+  for (let i = 0; i < 12; i++) {
+    // 会话已切走 / 用户已发起新流：停止刷新
+    if (convId !== currentConv.value || streamGen !== gen) return
+    // 旧流仍在收尾（[DONE] 未到）：等一拍再拉，不打断
+    if (streaming.value) {
+      await sleep(400)
+      continue
+    }
+    let items: TimelineEntry[] | null = null
+    try {
+      const res = await chatApi.getTrace(convId)
+      items = itemsToTimeline(res.items || [])
+    } catch {
+      // 拉取失败：下一轮再试
+    }
+    if (items) {
+      const hasReply = items.some(
+        (it) => it.kind === 'message' && it.role === 'assistant' && !!it.content.trim(),
+      )
+      if (hasReply) gotReply = true
+      // 前进式替换：只有新时间轴不短于当前，且更完整或已含完整回复时才应用。
+      // 保证只升不降、不清空，因此不会出现「清空 timeline → welcome 空态」的闪白。
+      const progressed = items.length > timeline.value.length
+      const equalButReply = hasReply && items.length === timeline.value.length
+      if (progressed || equalButReply) {
+        timeline.value = items
+        await scrollBottom()
+      }
+      // 完整回复已落盘且连续两轮内容一致 → 稳定，收工
+      if (gotReply && items.length === lastLen) return
+      lastLen = items.length
+    }
+    await sleep(1200)
+  }
+}
+
 function afterApprovalHandled() {
   // 审批回调在 backend 线程池 fire-and-forget，runtime 恢复图执行、trace 落盘有延迟：
-  // 延迟两次刷新当前会话，捕获恢复后的完整回复；期间切会话或发起新流则跳过，避免打断
+  // 轮询刷新当前会话，捕获恢复后的完整回复；不做会清空时间轴的整会话重载（openConversation），
+  // 避免审批结束后页面闪白。
   const convId = currentConv.value
-  const reload = () => {
-    if (convId && convId === currentConv.value && !streaming.value) openConversation(convId)
-  }
-  setTimeout(reload, 1000)
-  setTimeout(reload, 3200)
+  const gen = streamGen
+  setTimeout(() => {
+    if (convId && convId === currentConv.value) refreshTimelineAfterApproval(convId, gen)
+  }, 200)
 }
 
 // langchain 角色 → 前端展示角色
@@ -420,6 +467,7 @@ onMounted(async () => {
 </script>
 
 <template>
+  <div class="chat-page">
   <div class="chat">
     <!-- 会话侧栏 -->
     <aside class="conv-list">
@@ -575,6 +623,7 @@ onMounted(async () => {
       </template>
     </template>
   </AppModal>
+  </div>
 </template>
 
 <style scoped>
