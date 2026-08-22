@@ -311,6 +311,56 @@ CREATE TABLE skill_installation (
 
 -- ============================================
 -- tool 预设值数据
+-- 生成依据：runtime 当前 app/tools/ 各 @tool 声明（契约唯一来源；DB 仅作启用清单 +
+-- 审批敏感度，build_tool_specs 会用 convert_to_openai_tool 产物覆盖 description/parameters）。
+-- schema_json 与 convert_to_openai_tool 输出逐字一致；is_sensitive 与代码
+-- @register_tool(sensitive=...) 对齐（新增/改名/删工具须同步更新本预设值，否则 runtime
+-- 不会对 LLM 暴露未启用的工具，DB 有而代码未实现的会跳过）。
+-- created_at / updated_at 由表默认值填充，不在此写入。
 -- ============================================
-INSERT INTO tool (name, description, schema_json, is_sensitive, status, created_at, update_at) VALUES
-    ();
+INSERT INTO tool (name, description, schema_json, is_sensitive, status) VALUES
+    -- ---- agent 域：多 Agent 编排 ----
+    ('call_agent', '调用另一个 Agent 完成子任务（subAgent 编排，可并行派发）。',
+     '{"type":"object","properties":{"agent_id":{"type":"integer"},"task":{"type":"string"}},"required":["agent_id","task"]}',
+     1, 1),
+    ('list_agents', '列出当前 Claw 内的其他 Agent（不含自身），供协作路由选择。',
+     '{"type":"object","properties":{}}',
+     0, 1),
+    ('spawn_subagent', '把一个复杂任务拆成多个子任务并行执行，子任务里的敏感操作合并成一次审批。',
+     '{"type":"object","properties":{"tasks":{"type":"array","items":{"type":"object","additionalProperties":true}}},"required":["tasks"]}',
+     0, 1),
+    -- ---- persona 域：人格文件读写 ----
+    ('read_persona', '读取 Agent 人格文件的原始全文（保留原始空白与章节结构）。',
+     '{"type":"object","properties":{"file_name":{"type":"string"}},"required":["file_name"]}',
+     0, 1),
+    ('update_persona', '修改 Agent 人格文件（非敏感，直写 OSS）。修改前应先调用 read_persona 读取原文。',
+     '{"type":"object","properties":{"file_name":{"type":"string"},"operation":{"default":"overwrite","type":"string"},"content":{"anyOf":[{"type":"string"},{"type":"null"}],"default":null},"find":{"anyOf":[{"type":"string"},{"type":"null"}],"default":null},"replace":{"anyOf":[{"type":"string"},{"type":"null"}],"default":null}},"required":["file_name"]}',
+     0, 1),
+    -- ---- workspace 域：沙箱文件操作（读写删改敏感，查列/元信息非敏感）----
+    ('workspace_info', '查看工作区根目录 /workspace 的概况（根路径、修改时间、一级子目录）。',
+     '{"type":"object","properties":{}}',
+     0, 1),
+    ('ls', '列出工作区目录内容（目录、大小、修改时间、权限）。',
+     '{"type":"object","properties":{"path":{"default":".","type":"string"}}}',
+     0, 1),
+    ('tree', '以树形结构展示工作区目录（限制深度，避免超长输出）。',
+     '{"type":"object","properties":{"path":{"default":".","type":"string"},"max_depth":{"default":2,"type":"integer"}}}',
+     0, 1),
+    ('info', '查看工作区内文件或目录的元信息（类型、大小、修改时间、权限位）。',
+     '{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}',
+     0, 1),
+    ('read', '读取工作区内文本文件的完整内容。',
+     '{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}',
+     0, 1),
+    ('write', '写入或覆盖工作区内文件（父目录不存在时自动创建）。',
+     '{"type":"object","properties":{"path":{"type":"string"},"content":{"default":"","type":"string"}},"required":["path"]}',
+     1, 1),
+    ('append', '向工作区内文件末尾追加内容（自动补换行分隔）。',
+     '{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"}},"required":["path","content"]}',
+     1, 1),
+    ('mkdir', '创建工作区内的目录（含父目录，已存在不报错）。',
+     '{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}',
+     1, 1),
+    ('rm', '删除工作区内文件或空目录（删除不可恢复）。',
+     '{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}',
+     1, 1);
