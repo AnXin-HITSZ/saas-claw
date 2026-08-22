@@ -71,13 +71,14 @@ class _Child:
 
 class _SpawnSession:
     """一次 spawn 调用的进度。batches/decisions 逐轮追加，回放 interrupt 用。"""
-    __slots__ = ("spawn_id", "children", "batches", "decisions")
+    __slots__ = ("spawn_id", "children", "batches", "decisions", "pending_batch")
 
     def __init__(self, spawn_id: str, children: list[_Child]):
         self.spawn_id = spawn_id
         self.children = children
         self.batches: list[dict] = []    # 每轮 batch payload（interrupt 回放要原样传回）
         self.decisions: list[dict] = []  # 每轮 decision（与 batches 对齐）
+        self.pending_batch: dict | None = None  # 当前待决议轮次（resume 时在 len(decisions) 位置取决策）
 
 
 def _get_session(thread_id: str, spawn_id: str, tasks: list[dict]) -> _SpawnSession:
@@ -153,6 +154,21 @@ async def spawn_subagent(tasks: list[dict], *, config: RunnableConfig) -> str:
     subgraph = get_agent_subgraph(parent_agent, state.get("model_config"), state.get("tool_specs"))
 
     while True:
+        # 取待决议轮次的决策（若有）：首次运行新轮在此抛 GraphInterrupt 挂起父线程；resume 时
+        # interrupt() 返回存储决策。必须先决议再推进 child——否则 _advance_children 会跳过
+        # 未决议的 blocked child，把整把扇出提前结束成「未完成：被用户拒绝」（历史 bug）。
+        if sess.pending_batch is not None:
+            decision = interrupt(sess.pending_batch)
+            await emit_event(
+                state, EVT_APPROVAL_RESOLVED,
+                {"request_id": sess.pending_batch["request_id"], "decision": _overall(decision)},
+                config=config, span_id=f"spawn:{spawn_id}", parent_id=parent_span,
+                dedup_key=f"{spawn_id}:batch:{len(sess.decisions)}:resolved",
+            )
+            sess.decisions.append(decision)
+            _apply_decisions(sess, decision)
+            sess.pending_batch = None
+
         # 推进：start 新 child + resume 已决议 child，跑到各自下一个 blocker 或完成
         blocked = await _advance_children(sess, subgraph, state, config, cfg, depth, parent_span, thread_id)
         if not blocked:
@@ -161,6 +177,7 @@ async def spawn_subagent(tasks: list[dict], *, config: RunnableConfig) -> str:
         round_idx = len(sess.decisions)
         batch = _build_batch(sess, blocked, state, round_idx)
         sess.batches.append(batch)
+        sess.pending_batch = batch  # 本轮待决议：决策在下一轮循环顶部取（位置 = len(decisions)）
 
         await _submit_batch_approval(state, batch)
         await emit_event(
@@ -168,16 +185,6 @@ async def spawn_subagent(tasks: list[dict], *, config: RunnableConfig) -> str:
             config=config, span_id=f"spawn:{spawn_id}", parent_id=parent_span,
             dedup_key=f"{spawn_id}:batch:{round_idx}:pending",
         )
-
-        decision = interrupt(batch)
-
-        await emit_event(
-            state, EVT_APPROVAL_RESOLVED, {"request_id": batch["request_id"], "decision": _overall(decision)},
-            config=config, span_id=f"spawn:{spawn_id}", parent_id=parent_span,
-            dedup_key=f"{spawn_id}:batch:{round_idx}:resolved",
-        )
-        sess.decisions.append(decision)
-        _apply_decisions(sess, decision)
 
     result = _summarize(sess)
     _SPAWN_SESSIONS.pop((thread_id, spawn_id), None)
