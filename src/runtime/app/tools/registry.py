@@ -133,14 +133,15 @@ async def execute_tool_call(call: dict, state: ClawState, config: RunnableConfig
     )
 
     try:
+        # 注入确定性 _tool_call_id：供 call_agent/spawn_subagent 派生稳定 child span / 注册表 key
+        # （resume 整节点重跑时 tool_call_id 不变，据此可 rehydrate 容器会话）。敏感工具经
+        # approval_gate 执行同样需要——call_agent 透传子图审批依赖它定位跨 resume 的会话。
+        tool_config = with_state(config, state)
+        tool_config = {**tool_config, "configurable": {**tool_config["configurable"], "_tool_call_id": tool_call_id}}
         if is_sensitive:
             from .approval import approval_gate  # 延迟 import：避免与 approval 循环依赖
-            result = await approval_gate(state, name, args, spec["id"], config, tool_fn, tool_call_id)
+            result = await approval_gate(state, name, args, spec["id"], tool_config, tool_fn, tool_call_id)
         else:
-            # 注入确定性 _tool_call_id：供 spawn_subagent 派生稳定 child span / 注册表 key
-            # （resume 整节点重跑时 tool_call_id 不变，据此可 rehydrate 容器会话）。
-            tool_config = with_state(config, state)
-            tool_config = {**tool_config, "configurable": {**tool_config["configurable"], "_tool_call_id": tool_call_id}}
             result = await tool_fn.ainvoke(args, config=tool_config)
     except GraphBubbleUp:
         raise  # langgraph 控制流异常（审批挂起 interrupt / NodeInterrupt / 递归上限）必须透传，
